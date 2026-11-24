@@ -1,14 +1,17 @@
-# XLZ 服装档口 · 产品展示（本地版）
+# XLZ 服装档口 · 产品展示
 
-一个**双击即可打开**的移动端产品展示网页，依据《XLZ产品展示 · 项目需求文档》实现。配色取自巴西国旗：绿 `#009C3B`、黄 `#FFDF00`、蓝 `#002776`、白。
+**线上地址：<https://xlz-showcase.wenkezhang995.workers.dev/>**
+
+一个移动端产品展示网页，依据《XLZ产品展示 · 项目需求文档》实现。配色取自巴西国旗：绿 `#009C3B`、黄 `#FFDF00`、蓝 `#002776`、白。
 
 ![首页](preview/home.png)
 
 ## 快速开始
 
-1. 双击 `public/index.html`（推荐 Chrome / Edge，窗口宽度 390–430px 最接近手机效果）。
-2. 访客无需登录即可浏览、搜索、查看详情。
-3. 管理员入口在右上角「登录」或页脚「管理员登录」。
+- 线上直接打开：<https://xlz-showcase.wenkezhang995.workers.dev/>
+- 本地双击 `public/index.html`（推荐 Chrome / Edge，窗口宽度 390–430px 最接近手机效果）。
+- 访客无需登录即可浏览、搜索、查看详情。
+- 管理员入口在右上角「登录」或页脚「管理员登录」。
 
 | 初始账号 | 密码 |
 | --- | --- |
@@ -95,11 +98,14 @@ xlz-showcase/
 - 已跑通：语言三态切换、搜索、详情库存（`P:有货 / M:无货 / G:有货 / GG:有货`）、灯箱、错误密码提示、登录、产品新增（含图片上传）、刷新后数据仍在、删除确认、上下架开关、账号新增/删除、分类新增/删除。
 - 表单空提交时 5 个必填项正确标红。
 
-## 部署到 Cloudflare Pages
+## 线上地址与部署
 
-本项目是纯静态站点，无构建步骤、无运行时依赖，适合 Cloudflare Pages 免费套餐。
+| 环境 | 地址 | 用途 |
+| --- | --- | --- |
+| 生产 | <https://xlz-showcase.wenkezhang995.workers.dev/> | 对外分享的固定地址，始终指向 `main` 最新部署 |
+| 预览 | `<版本前缀>-xlz-showcase.wenkezhang995.workers.dev` | 每次推送自动生成的临时地址，用于验收单个版本；前缀会变化，不要对外分享 |
 
-在 Cloudflare Dashboard 连接本仓库时，按以下配置填写：
+当前部署在 **Cloudflare Workers 静态资源（Workers Builds，已连接 GitHub 自动部署）**，站点输出目录为 `public/`。构建配置（Workers / Pages 均适用）：
 
 | 配置项 | 填写 |
 | --- | --- |
@@ -108,17 +114,11 @@ xlz-showcase/
 | Build output directory | `public` |
 | Root directory | `/` |
 
-路径：**Workers & Pages → Create → Pages → Connect to Git → 选择仓库 → 按上表填写 → Save and Deploy**。
+> 如果希望使用 `*.pages.dev` 域名，可用同一仓库按上表新建一个 Pages 项目，代码无需修改；当前 Workers 部署已能满足静态展示与自动部署。
 
-如使用 CLI 直传（需要先登录 Cloudflare）：
+`public/_headers` 已生效：`nosniff`、`SAMEORIGIN`、`Referrer-Policy`、`Permissions-Policy`。`public/404.html` 供 Pages 使用；Workers 静态资源默认返回纯 404，不影响主流程。
 
-```bash
-npx wrangler pages deploy public --project-name=xlz-showcase --branch=main
-```
-
-`_headers` 会为所有响应加上 `nosniff`、`SAMEORIGIN`、`Referrer-Policy` 等安全头；`404.html` 用于未知路径并引导回首页。
-
-> 数据说明：部署后，产品数据仍保存在每个访客自己的浏览器 `localStorage` 中——管理员在 A 浏览器的上架不会出现在 B 浏览器。当前版本适合展示/演示；要让店主上架对所有客户生效，需要加后端（如 Cloudflare Pages Functions + D1 + R2）。
+> 数据说明：产品数据仍保存在每个访客自己的浏览器 `localStorage` 中——管理员在 A 浏览器的上架不会出现在 B 浏览器。当前版本适合展示/演示；要让店主上架对所有客户生效，需要加后端（如 Cloudflare Workers + D1 + R2）。
 
 ## 更新方法
 
@@ -131,7 +131,7 @@ npx wrangler pages deploy public --project-name=xlz-showcase --branch=main
    git push
    ```
 
-3. Cloudflare Pages 检测到 `main` 分支推送后自动重新部署，通常 1 分钟内完成，可在 **Deployments** 标签查看状态。
+3. Workers Builds 检测到 `main` 分支推送后自动部署，通常 1 分钟内完成；生产地址不变，预览地址会随版本变化。
 4. 商品数据不随代码更新：产品内容在浏览器本地，批量迁移用「店铺 → 数据备份 → 导出 / 导入」。
 
 ## 已知边界（本地版）
