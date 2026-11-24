@@ -82,7 +82,8 @@ const KEY = {
   cats: 'xlz.categories.v1',
   settings: 'xlz.settings.v1',
   session: 'xlz.session.v1',
-  lang: 'xlz.lang.v1'
+  lang: 'xlz.lang.v1',
+  colorDict: 'xlz.colorDict.v1'
 };
 const SIZE_ORDER = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4'];
 const DEFAULT_CATS = [
@@ -91,9 +92,33 @@ const DEFAULT_CATS = [
 ];
 const DEFAULT_SETTINGS = {
   phone: '+55 11 91234-5678',
-  address: 'Rua 25 de Março, 1234 — Centro, São Paulo — SP',
-  mapQuery: 'Rua 25 de Março 1234 São Paulo'
+  address: { zh: '圣保罗市中心 25 de Março 街 1234 号', pt: 'Rua 25 de Março, 1234 — Centro, São Paulo — SP' },
+  mapQuery: 'Rua 25 de Março 1234 São Paulo',
+  brand: { zh: 'XLZ', pt: 'XLZ' },
+  brandSub: { zh: 'ATACADO', pt: 'ATACADO' },
+  kicker: { zh: '2026 秋冬系列', pt: 'Coleção 2026' },
+  heroTitle: { zh: '本周上新', pt: 'Novo drop' },
+  heroSub: { zh: '圣保罗档口现货 · 支持拿货', pt: 'Peças prontas em São Paulo para revenda' }
 };
+const LIMITS = {
+  brand: { zh: 12, pt: 12 },
+  brandSub: { zh: 20, pt: 20 },
+  kicker: { zh: 16, pt: 24 },
+  heroTitle: { zh: 20, pt: 30 },
+  heroSub: { zh: 40, pt: 60 },
+  name: { zh: 20, pt: 40 },
+  model: { zh: 20, pt: 20 },
+  color: { zh: 12, pt: 20 },
+  specialTag: { zh: 12, pt: 20 },
+  phone: { zh: 20 },
+  address: { zh: 60, pt: 80 }
+};
+const SPECIAL_TAG_PRESETS = [
+  { zh: '面料细节', pt: 'Detalhe do tecido' },
+  { zh: '领口细节', pt: 'Detalhe da gola' },
+  { zh: '口袋细节', pt: 'Detalhe do bolso' },
+  { zh: '裤腰细节', pt: 'Detalhe do cós' }
+];
 
 const state = {
   lang: 'mix',
@@ -101,15 +126,18 @@ const state = {
   admins: [],
   cats: [],
   settings: {},
+  colorDict: [],
   session: null,
   query: '',
-  cat: 'all'
+  cat: 'all',
+  adminCat: 'all'
 };
 let F = null;            // 当前表单状态
 let detailColor = 0;     // 详情页当前颜色
 let lastProductId = '';
 let pendingRoute = '';
 let lastKey = '';
+let imgEditorIndex = -1;
 
 /* ------------------------------------------------------------------ *
  * 3. 多语言
@@ -123,12 +151,8 @@ const I18N = {
   searchPh: ['搜索品名 / 型号', 'Buscar nome ou modelo'],
   searchResult: ['搜索', 'Busca'],
   pieces: ['款', 'peças'],
-  kicker: ['2026 秋冬系列', 'Coleção 2026'],
-  heroTitle: ['本周上新', 'Novo drop'],
-  heroSub: ['圣保罗档口现货 · 支持拿货', 'Peças prontas em São Paulo para revenda'],
   statOnSale: ['款在售', 'à venda'],
   statCats: ['个栏目', 'seções'],
-  allCats: ['全部', 'Todos'],
   emptyCat: ['该栏目暂无产品', 'Nenhum produto nesta seção'],
   emptySearch: ['没有找到相关产品', 'Nada encontrado'],
   emptySearchHint: ['换个品名、型号或颜色试试', 'Tente outro nome, modelo ou cor'],
@@ -150,7 +174,6 @@ const I18N = {
   oos: ['无货', 'Esgotado'],
   soldOut: ['该颜色暂时售罄', 'Cor esgotada'],
   contact: ['到店看货', 'Visite a loja'],
-  comeVisit: ['批发 · 零售', 'Atacado e varejo'],
   phone: ['电话', 'Telefone'],
   address: ['地址', 'Endereço'],
   callNow: ['一键拨号', 'Ligar agora'],
@@ -165,6 +188,11 @@ const I18N = {
   tabProducts: ['产品', 'Produtos'],
   tabAccounts: ['账号', 'Contas'],
   tabSettings: ['店铺', 'Loja'],
+  tabStockout: ['缺货', 'Esgotados'],
+  newSection: ['新品', 'Novidades'],
+  hotSection: ['热卖品', 'Mais vendidos'],
+  adminStockTitle: ['缺货商品', 'Produtos esgotados'],
+  stockoutBadge: ['缺货', 'Esgotado'],
   allProducts: ['产品库', 'Produtos'],
   statusOn: ['上架', 'Ativo'],
   statusOff: ['下架', 'Inativo'],
@@ -199,11 +227,10 @@ const I18N = {
   fNamePt: ['品名（葡文）', 'Nome (português)'],
   fModel: ['产品型号', 'Modelo'],
   fPrice: ['售价（R$）', 'Preço (R$)'],
-  photoHint: ['1–10 张，首张为封面', '1 a 10 fotos · a primeira é a capa'],
+  photoHint: ['1–10 张，可设封面', '1 a 10 fotos · defina a capa'],
   addPhoto: ['添加图片', 'Adicionar foto'],
   coverLabel: ['封面', 'Capa'],
   fColors: ['颜色标签', 'Cores'],
-  colorPh: ['如：红色', 'Ex.: Vermelho'],
   fSizes: ['尺码标签', 'Tamanhos'],
   fStock: ['库存状态', 'Estoque'],
   fStockHint: ['点击格子切换有货 / 无货', 'Toque para alternar disponível / esgotado'],
@@ -214,10 +241,50 @@ const I18N = {
   saveProduct: ['保存产品', 'Salvar produto'],
   matrixHint: ['添加颜色与尺码后即可标记库存', 'Adicione cores e tamanhos para marcar o estoque'],
   noColors: ['还没有颜色', 'Sem cores'],
+  imageEditor: ['图片设置', 'Configurar foto'],
+  imageHint: ['点击图片可设置颜色、特殊标签与封面', 'Toque na foto para cor, tags e capa'],
+  imageColor: ['归属颜色', 'Cor da foto'],
+  genericImage: ['通用图', 'Foto geral'],
+  specialTags: ['特殊标签', 'Tags especiais'],
+  setCover: ['设为封面', 'Definir capa'],
+  coverShort: ['封面', 'Capa'],
+  prevShort: ['前移', 'Antes'],
+  nextShort: ['后移', 'Depois'],
+  movePrev: ['前移', 'Mover para antes'],
+  moveNext: ['后移', 'Mover para depois'],
+  done: ['完成', 'Concluir'],
+  addTag: ['添加标签', 'Adicionar tag'],
+  noTags: ['未添加特殊标签', 'Sem tags especiais'],
+  colorDictTitle: ['颜色词典', 'Dicionário de cores'],
+  colorDictHint: ['修改后，已使用该颜色的产品会同步另一种语言', 'As alterações sincronizam a outra língua nos produtos'],
+  addDictColor: ['新增颜色', 'Nova cor'],
+  editDictColor: ['编辑颜色', 'Editar cor'],
+  dictZh: ['中文名称', 'Nome em chinês'],
+  dictPt: ['葡文名称', 'Nome em português'],
+  fHeader: ['首页头部', 'Cabeçalho da loja'],
+  brandName: ['品牌主名', 'Nome da marca'],
+  brandSubLabel: ['品牌副标', 'Subtítulo da marca'],
+  kickerLabel: ['小标签', 'Etiqueta'],
+  heroTitleLabel: ['主标题', 'Título principal'],
+  heroSubLabel: ['副标题', 'Subtítulo'],
+  emptyHeader: ['登录后可添加文案', 'Faça login para adicionar o texto'],
+  headerHint: ['中葡分别填写；留空时展示提示文案', 'Preencha chinês e português; vazio mostra o texto padrão'],
+  chooseColor: ['选择词典颜色', 'Escolha uma cor do dicionário'],
+  customColor: ['自定义颜色', 'Cor personalizada'],
+  customColorHint: ['自定义颜色必须填写中文和葡文', 'Cor personalizada exige chinês e português'],
+  eTooLong: ['超过字符限制', 'Texto muito longo'],
+  eColorZh: ['请填写中文颜色名', 'Informe a cor em chinês'],
+  eColorPt: ['请填写葡文颜色名', 'Informe a cor em português'],
+  eDictDup: ['词典中已存在该颜色', 'Cor já existe no dicionário'],
+  eTagDup: ['该标签已存在', 'Tag já adicionada'],
+  eTagFields: ['请填写标签中文与葡文', 'Informe a tag em chinês e português'],
+  sDictSaved: ['颜色词典已更新', 'Dicionário atualizado'],
+  sHeaderSaved: ['头部文案已保存', 'Cabeçalho salvo'],
+  stockoutNone: ['暂无缺货产品', 'Nenhum produto esgotado'],
+  filterAll: ['全部', 'Todos'],
   loginTitle: ['管理员登录', 'Acesso do administrador'],
   loginSub: ['登录后可上传、编辑与删除产品', 'Entre para gerenciar o catálogo'],
   loginBtn: ['登录', 'Entrar'],
-  loginDemo: ['初始账号', 'Contas iniciais'],
   username: ['账号', 'Usuário'],
   password: ['密码', 'Senha'],
   footTag: ['服装批发 · 圣保罗', 'Atacado de roupas · São Paulo'],
@@ -295,6 +362,7 @@ function nm(obj) {
   const pt = (obj && obj.pt) || zh;
   if (state.lang === 'zh') return '<span class="nm">' + esc(zh) + '</span>';
   if (state.lang === 'pt') return '<span class="nm">' + esc(pt) + '</span>';
+  if (zh === pt) return '<span class="nm">' + esc(zh) + '</span>';
   return '<span class="nm"><span class="zh">' + esc(zh) + '</span><span class="pt">' + esc(pt) + '</span></span>';
 }
 function colorNameHTML(col) {
@@ -439,6 +507,17 @@ function artSet(kind, pal, model) {
   return [1, 2, 3].map((look) => artDataUri({ kind, color: pal[0], dark: pal[1], bg: pal[2], model, look }));
 }
 function makeProduct(o) {
+  const imgs = artSet(o.art.kind, o.art.pal, o.model).map((src, i) => ({
+    id: 'img' + o.model + '-' + (i + 1),
+    src,
+    colorId: null,
+    specialTags: [],
+    isCover: i === 0
+  }));
+  const colors = (o.colors || []).map((c, i) => {
+    const d = dictByZh(c.zh) || dictByPt(c.pt);
+    return { id: 'col' + o.model + '-' + (i + 1), dictId: d ? d.id : null, zh: c.zh, pt: c.pt, stock: c.stock };
+  });
   return {
     id: 'p' + o.model,
     category: o.cat,
@@ -446,8 +525,8 @@ function makeProduct(o) {
     model: o.model,
     price: o.price,
     sizes: o.sizes,
-    colors: o.colors,
-    images: artSet(o.art.kind, o.art.pal, o.model),
+    colors,
+    images: imgs,
     onShelf: o.onShelf !== false,
     isNew: !!o.isNew,
     starred: !!o.starred,
@@ -521,8 +600,8 @@ function seedProducts() {
 function seedAdmins() {
   const ts = now();
   return [
-    { u: 'admin', h: hashPwd('admin', 'admin123'), created: ts },
-    { u: 'staff', h: hashPwd('staff', 'staff123'), created: ts }
+    { u: 'admin', h: 'c9ff3cd93bc23842aa2e7ab6fe180431bd110926e90382f4949f28d51dc9a06c', created: ts },
+    { u: 'staff', h: '099bf6eb64d4158c373ed7f1cc40659fca39c19366c5f1629c72437305e2af1f', created: ts }
   ];
 }
 
@@ -553,22 +632,81 @@ function saveSettings() {
 function saveCats() {
   return writeLS(KEY.cats, state.cats);
 }
+function saveColorDict() {
+  return writeLS(KEY.colorDict, state.colorDict);
+}
+function migrateProduct(p) {
+  let changed = false;
+  if (!Array.isArray(p.images)) { p.images = []; changed = true; }
+  const imgs = [];
+  p.images.forEach((img, i) => {
+    if (typeof img === 'string') {
+      imgs.push({ id: uid('img'), src: img, colorId: null, specialTags: [], isCover: i === 0 });
+      changed = true;
+      return;
+    }
+    if (!img || typeof img !== 'object') { changed = true; return; }
+    const o = Object.assign({}, img);
+    if (!o.id) { o.id = uid('img'); changed = true; }
+    if (!Array.isArray(o.specialTags)) { o.specialTags = []; changed = true; }
+    else {
+      o.specialTags = o.specialTags.map((t) => (typeof t === 'string'
+        ? { zh: t, pt: t }
+        : { zh: String(t.zh || t.pt || ''), pt: String(t.pt || t.zh || '') }))
+        .filter((t) => t.zh || t.pt);
+    }
+    if (!('colorId' in o)) { o.colorId = null; changed = true; }
+    o.isCover = !!o.isCover;
+    imgs.push(o);
+  });
+  p.images = imgs;
+  if (p.images.length && !p.images.some((i) => i.isCover)) { p.images[0].isCover = true; changed = true; }
+  let coverSeen = false;
+  p.images.forEach((i) => {
+    if (i.isCover) {
+      if (coverSeen) { i.isCover = false; changed = true; }
+      else coverSeen = true;
+    }
+  });
+  if (!Array.isArray(p.colors)) { p.colors = []; changed = true; }
+  p.colors.forEach((c) => {
+    if (!c.id) { c.id = uid('col'); changed = true; }
+    if (!('dictId' in c)) {
+      const d = dictByZh(c.zh) || dictByPt(c.pt);
+      c.dictId = d ? d.id : null;
+      changed = true;
+    }
+    if (!c.stock || typeof c.stock !== 'object') { c.stock = {}; changed = true; }
+  });
+  p.images.forEach((i) => {
+    if (i.colorId && !p.colors.some((c) => c.id === i.colorId)) { i.colorId = null; changed = true; }
+  });
+  return changed;
+}
 function loadAll() {
   const lang = readLS(KEY.lang, 'mix');
   state.lang = ['zh', 'pt', 'mix'].indexOf(lang) >= 0 ? lang : 'mix';
+  loadColorDict();
 
   const cats = readLS(KEY.cats, null);
   state.cats = (Array.isArray(cats) && cats.length) ? cats : DEFAULT_CATS.map((c) => ({ ...c }));
-  const settings = readLS(KEY.settings, null);
-  state.settings = Object.assign({}, DEFAULT_SETTINGS, settings || {});
+  const rawSettings = readLS(KEY.settings, null);
+  state.settings = mergeSettings(rawSettings);
   state.admins = readLS(KEY.admins, null);
   state.products = readLS(KEY.products, null);
 
   let seeded = false;
   if (!Array.isArray(state.admins) || !state.admins.length) { state.admins = seedAdmins(); seeded = true; }
   if (!Array.isArray(state.products)) { state.products = seedProducts(); seeded = true; }
-  if (!readLS(KEY.cats, null)) writeLS(KEY.cats, state.cats);
-  if (!readLS(KEY.settings, null)) writeLS(KEY.settings, state.settings);
+  if (!Array.isArray(cats) || !cats.length) writeLS(KEY.cats, state.cats);
+  if (!rawSettings || !rawSettings.brand) writeLS(KEY.settings, state.settings);
+
+  let migrated = false;
+  state.products.forEach((p) => { if (migrateProduct(p)) migrated = true; });
+  if (syncColorsFromDict()) migrated = true;
+  if (migrated) {
+    try { localStorage.setItem(KEY.products, JSON.stringify(state.products)); } catch (e) { /* 忽略 */ }
+  }
   if (seeded) {
     writeLS(KEY.admins, state.admins);
     try { localStorage.setItem(KEY.products, JSON.stringify(state.products)); } catch (e) { /* 忽略 */ }
@@ -578,7 +716,9 @@ function loadAll() {
   state.session = (s && s.u && s.exp > now() && state.admins.some((a) => a.u === s.u))
     ? { u: s.u, exp: s.exp } : null;
 
-  if (state.cat !== 'all' && !state.cats.some((c) => c.id === state.cat)) state.cat = 'all';
+  const allowed = ['all', 'new', 'hot'].concat(state.cats.map((c) => c.id));
+  if (allowed.indexOf(state.cat) < 0) state.cat = 'all';
+  if (state.adminCat !== 'all' && !state.cats.some((c) => c.id === state.adminCat)) state.adminCat = 'all';
 }
 
 /* ------------------------------------------------------------------ *
@@ -653,32 +793,112 @@ function currentProduct() {
   const r = parseRoute();
   return r.name === 'detail' ? state.products.find((p) => p.id === r.id) : null;
 }
-const COLOR_HEX = {
-  '黑': '#111214', '黑色': '#111214', '白': '#F7F5EF', '白色': '#F7F5EF', '红': '#C8102E', '红色': '#C8102E',
-  '米': '#D9C7AE', '米色': '#D9C7AE', '米白': '#EFE6D4', '蓝': '#2E5A94', '蓝色': '#2E5A94', '牛仔蓝': '#3E6493',
-  '绿': '#1F6B3F', '绿色': '#1F6B3F', '墨绿': '#24513A', '黄': '#E9B81C', '黄色': '#E9B81C',
-  '灰': '#9AA3A0', '灰色': '#9AA3A0', '粉': '#E5A0B0', '粉色': '#E5A0B0', '棕': '#7A5742', '棕色': '#7A5742',
-  '咖': '#6B4B36', '咖啡': '#6B4B36', '紫': '#6C4C8C', '紫色': '#6C4C8C', '橙': '#D9722B', '橙色': '#D9722B',
-  '酒红': '#6E1226', '藏青': '#1B2A4A', '卡其': '#B7A57C', '驼色': '#B98C5E', '杏色': '#E2BE9C'
-};
-const COLOR_PT = {
-  '黑': 'Preto', '黑色': 'Preto', '白': 'Branco', '白色': 'Branco', '红': 'Vermelho', '红色': 'Vermelho',
-  '米': 'Bege', '米色': 'Bege', '米白': 'Off-white', '蓝': 'Azul', '蓝色': 'Azul', '牛仔蓝': 'Azul Jeans',
-  '绿': 'Verde', '绿色': 'Verde', '墨绿': 'Verde Musgo', '黄': 'Amarelo', '黄色': 'Amarelo',
-  '灰': 'Cinza', '灰色': 'Cinza', '粉': 'Rosa', '粉色': 'Rosa', '棕': 'Marrom', '棕色': 'Marrom',
-  '咖': 'Marrom', '咖啡': 'Marrom', '紫': 'Roxo', '紫色': 'Roxo', '橙': 'Laranja', '橙色': 'Laranja',
-  '酒红': 'Vinho', '藏青': 'Azul Marinho', '卡其': 'Caqui', '驼色': 'Camel', '杏色': 'Pêssego'
-};
-function colorHex(name) { return COLOR_HEX[String(name || '').trim()] || '#C9C4B5'; }
-function ptColor(name) { return COLOR_PT[String(name || '').trim()] || ''; }
+/* 颜色词典：词典为准，未收录颜色保留手工录入值 */
+function loadColorDict() {
+  const preset = (window.XLZ_COLOR_DICT || []).map((c) => ({ id: c.id, zh: c.zh, pt: c.pt, hex: c.hex }));
+  const stored = readLS(KEY.colorDict, null);
+  if (!Array.isArray(stored) || !stored.length) { state.colorDict = preset; return; }
+  const map = new Map(preset.map((c) => [c.id, c]));
+  stored.forEach((c) => {
+    if (c && c.id) map.set(c.id, Object.assign({}, map.get(c.id) || {}, c));
+  });
+  state.colorDict = Array.from(map.values());
+}
+function dictById(id) { return state.colorDict.find((c) => c.id === id) || null; }
+function dictByZh(zh) {
+  const k = String(zh || '').trim();
+  return k ? (state.colorDict.find((c) => c.zh === k) || null) : null;
+}
+function dictByPt(pt) {
+  const k = String(pt || '').trim().toLowerCase();
+  return k ? (state.colorDict.find((c) => String(c.pt || '').toLowerCase() === k) || null) : null;
+}
+function colorHex(name, dictId) {
+  const d = dictById(dictId) || dictByZh(name) || dictByPt(name);
+  return d && d.hex ? d.hex : '#C9C4B5';
+}
+function syncColorsFromDict() {
+  let changed = false;
+  state.products.forEach((p) => {
+    (p.colors || []).forEach((c) => {
+      if (!c.dictId) return;
+      const d = dictById(c.dictId);
+      if (d && (c.zh !== d.zh || c.pt !== d.pt)) {
+        c.zh = d.zh;
+        c.pt = d.pt;
+        changed = true;
+      }
+    });
+  });
+  return changed;
+}
+function mergeSettings(raw) {
+  const out = Object.assign({}, DEFAULT_SETTINGS, raw || {});
+  ['brand', 'brandSub', 'kicker', 'heroTitle', 'heroSub'].forEach((k) => {
+    const v = raw && raw[k];
+    out[k] = {
+      zh: v && typeof v.zh === 'string' ? v.zh : DEFAULT_SETTINGS[k].zh,
+      pt: v && typeof v.pt === 'string' ? v.pt : DEFAULT_SETTINGS[k].pt
+    };
+  });
+  const addr = raw && raw.address;
+  out.address = typeof addr === 'string'
+    ? { zh: addr, pt: addr }
+    : {
+      zh: addr && typeof addr.zh === 'string' ? addr.zh : DEFAULT_SETTINGS.address.zh,
+      pt: addr && typeof addr.pt === 'string' ? addr.pt : DEFAULT_SETTINGS.address.pt
+    };
+  return out;
+}
+function headerVal(key) {
+  const v = state.settings[key] || DEFAULT_SETTINGS[key] || { zh: '', pt: '' };
+  return { zh: String(v.zh || '').trim(), pt: String(v.pt || '').trim() };
+}
+function headerHTML(key) {
+  const v = headerVal(key);
+  if (!v.zh && !v.pt) return nm({ zh: I18N.emptyHeader[0], pt: I18N.emptyHeader[1] });
+  return nm({ zh: v.zh || v.pt, pt: v.pt || v.zh });
+}
+function imgSrc(img) { return typeof img === 'string' ? img : ((img && img.src) || ''); }
+function coverImg(p) {
+  const imgs = (p && p.images) || [];
+  const cover = imgs.find((i) => i && i.isCover) || imgs[0];
+  return imgSrc(cover) || FALLBACK_ART;
+}
+function galleryImages(p, ci) {
+  const all = (p && p.images) || [];
+  if (!all.length) return [];
+  const color = (p.colors || [])[ci];
+  if (!color) return all;
+  const byColor = all.filter((i) => i && i.colorId === color.id);
+  const generic = all.filter((i) => i && !i.colorId);
+  if (byColor.length) return byColor;
+  if (generic.length) return generic;
+  return all;
+}
+function isSoldOut(p) {
+  const sizes = SIZE_ORDER.filter((s) => (p.sizes || []).indexOf(s) >= 0);
+  if (!p.colors || !p.colors.length || !sizes.length) return true;
+  return !p.colors.some((c) => sizes.some((s) => c.stock && c.stock[s]));
+}
+function tagHTML(tag) {
+  if (!tag) return '';
+  const zh = tag.zh || tag.pt || '';
+  const pt = tag.pt || tag.zh || '';
+  if (state.lang === 'zh') return esc(zh);
+  if (state.lang === 'pt') return esc(pt);
+  if (zh === pt) return esc(zh);
+  return '<span class="tg-zh">' + esc(zh) + '</span><span class="tg-pt">' + esc(pt) + '</span>';
+}
 
 /* ------------------------------------------------------------------ *
  * 9. 顶栏 / 页脚
  * ------------------------------------------------------------------ */
 function brandHTML() {
-  return '<a class="brand" href="#/" aria-label="XLZ ATACADO">'
+  const b = headerVal('brand');
+  return '<a class="brand" href="#/" aria-label="' + esc((b.zh || b.pt || 'XLZ') + ' ' + (headerVal('brandSub').zh || '')) + '">'
     + '<span class="brand-mark" aria-hidden="true"></span>'
-    + '<span class="brand-text"><b>XLZ</b><small>ATACADO</small></span></a>';
+    + '<span class="brand-text"><b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></span></a>';
 }
 function langHTML() {
   const opts = [['zh', '中'], ['pt', 'PT'], ['mix', '中·PT']];
@@ -702,22 +922,22 @@ function topbar(opt) {
     + (o.back ? '<a class="icon-btn" href="' + esc(o.back) + '" aria-label="' + esc(tt('back')) + '">' + ic('back', 20) + '</a>' : '')
     + (o.back ? '' : brandHTML())
     + (o.title ? '<h1 class="topbar-title"><span class="ttl">' + o.title + '</span></h1>' : '')
-    + (o.back && !o.title ? '<span class="topbar-title" style="opacity:.9">XLZ</span>' : '')
+    + (o.back && !o.title ? '<span class="topbar-title" style="opacity:.9">' + headerHTML('brand') + '</span>' : '')
     + '<div class="topbar-right">' + langHTML() + (o.hideAccount ? '' : accountHTML()) + '</div>'
     + '</div></header>';
 }
 function footerHTML() {
   const s = state.settings;
   const tel = String(s.phone || '').replace(/[^\d+]/g, '');
-  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.mapQuery || s.address || '');
+  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.mapQuery || (s.address && s.address.pt) || '');
   return '<footer class="footer' + (state.session ? ' with-fab' : '') + '"><div class="wrap">'
     + '<div class="foot-top"><div class="foot-brand"><span class="brand-mark" aria-hidden="true"></span>'
-    + '<b>XLZ</b><small>ATACADO</small></div><p class="foot-tag">' + t('footTag') + '</p></div>'
+    + '<b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></div><p class="foot-tag">' + t('footTag') + '</p></div>'
     + '<div class="foot-list">'
     + '<a class="foot-item" href="tel:' + esc(tel) + '"><span class="fi">' + ic('phone', 18) + '</span>'
     + '<span class="ft"><small>' + t('phone') + '</small><b>' + esc(s.phone) + '</b></span></a>'
     + '<a class="foot-item" href="' + esc(map) + '" target="_blank" rel="noopener"><span class="fi">' + ic('pin', 18) + '</span>'
-    + '<span class="ft"><small>' + t('address') + '</small><b>' + esc(s.address) + '</b></span></a>'
+    + '<span class="ft"><small>' + t('address') + '</small><b>' + nm(s.address) + '</b></span></a>'
     + '</div>'
     + '<div class="foot-bottom"><span>' + t('footNote') + '</span>'
     + (state.session
@@ -734,33 +954,20 @@ function heroHTML(vis) {
   return '<section class="hero">'
     + '<div class="hero-deco" aria-hidden="true"><span class="hd-glow"></span><span class="hd-diamond"></span>'
     + '<span class="hd-dot d1"></span><span class="hd-dot d2"></span><span class="hd-dot d3"></span></div>'
-    + '<span class="hero-wm" aria-hidden="true">XLZ</span>'
     + '<div class="wrap hero-in">'
-    + '<span class="pill"><i class="pill-dot"></i>' + t('kicker') + '</span>'
-    + '<h1 class="hero-title">' + heroTitleHTML() + '</h1>'
-    + '<p class="hero-sub">' + heroSubHTML() + '</p>'
+    + '<span class="pill"><i class="pill-dot"></i>' + headerHTML('kicker') + '</span>'
+    + '<h1 class="hero-title">' + headerHTML('heroTitle') + '</h1>'
+    + '<p class="hero-sub">' + headerHTML('heroSub') + '</p>'
     + '<div class="hero-stats">'
     + '<div class="stat"><b>' + String(onSale).padStart(2, '0') + '</b><small>' + statLabel('statOnSale') + '</small></div>'
     + '<div class="stat"><b>' + String(state.cats.length).padStart(2, '0') + '</b><small>' + statLabel('statCats') + '</small></div>'
     + '</div></div></section>';
-}
-function heroSubHTML() {
-  const zh = I18N.heroSub[0], pt = I18N.heroSub[1];
-  if (state.lang === 'zh') return esc(zh);
-  if (state.lang === 'pt') return esc(pt);
-  return '<span class="hs-zh">' + esc(zh) + '</span><span class="hs-pt">' + esc(pt) + '</span>';
 }
 function statLabel(key) {
   const e = I18N[key] || [key, key];
   if (state.lang === 'zh') return esc(e[0]);
   if (state.lang === 'pt') return esc(e[1]);
   return '<span class="sz">' + esc(e[0]) + '</span><span class="sp">' + esc(e[1]) + '</span>';
-}
-function heroTitleHTML() {
-  const zh = I18N.heroTitle[0], pt = I18N.heroTitle[1];
-  if (state.lang === 'zh') return '<span class="hero-line">' + esc(zh) + '</span>';
-  if (state.lang === 'pt') return '<span class="hero-line pt">' + esc(pt) + '</span>';
-  return '<span class="hero-line zh">' + esc(zh) + '</span><span class="hero-line pt">' + esc(pt) + '</span>';
 }
 function searchHTML() {
   return '<div class="searchbar" role="search"><label class="search">'
@@ -771,7 +978,11 @@ function searchHTML() {
     + ic('x', 16) + '</button></label></div>';
 }
 function filtersHTML() {
-  const items = [{ id: 'all', zh: I18N.allCats[0], pt: I18N.allCats[1] }].concat(state.cats);
+  const items = [
+    { id: 'all', zh: I18N.filterAll[0], pt: I18N.filterAll[1] },
+    { id: 'new', zh: I18N.newSection[0], pt: I18N.newSection[1] },
+    { id: 'hot', zh: I18N.hotSection[0], pt: I18N.hotSection[1] }
+  ].concat(state.cats);
   return '<div class="filters">' + items.map((c) =>
     '<button type="button" class="filter-chip' + (state.cat === c.id ? ' on' : '') + '" data-act="filter" data-cat="'
     + esc(c.id) + '" title="' + esc((c.zh || '') + ' / ' + (c.pt || '')) + '">' + nm(c) + '</button>').join('') + '</div>';
@@ -782,7 +993,7 @@ function searchPlaceholder() {
   return '搜索品名 · Buscar nome';
 }
 function cardHTML(p, isAdmin) {
-  const img = (p.images && p.images[0]) || FALLBACK_ART;
+  const img = coverImg(p);
   return '<article class="card' + (p.onShelf ? '' : ' is-off') + '" data-act="open" data-id="' + esc(p.id) + '"'
     + ' tabindex="0" role="link" aria-label="' + esc((p.name.zh || '') + ' ' + (p.name.pt || '')) + '">'
     + '<div class="card-media"><img src="' + img + '" alt="' + esc((p.name.zh || '') + ' ' + (p.name.pt || '')) + '" loading="lazy" decoding="async">'
@@ -794,15 +1005,18 @@ function cardHTML(p, isAdmin) {
     + '<div class="card-body"><div class="card-name">' + nm(p.name) + '</div>'
     + '<div class="card-model">№ ' + esc(p.model) + '</div></div></article>';
 }
-function catSectionHTML(cat, items, isAdmin) {
-  return '<section class="cat" id="cat-' + esc(cat.id) + '">'
-    + '<div class="cat-head"><h2 class="cat-title"><span class="cat-bar"></span>' + nm(cat) + '</h2>'
+function sectionHTML(id, label, items, isAdmin) {
+  return '<section class="cat" id="' + esc(id) + '">'
+    + '<div class="cat-head"><h2 class="cat-title"><span class="cat-bar"></span>' + nm(label) + '</h2>'
     + '<span class="cat-count">' + items.length + '</span></div>'
     + (items.length
       ? '<div class="grid">' + items.map((p) => cardHTML(p, isAdmin)).join('') + '</div>'
       : '<div class="cat-empty">' + t('emptyCat')
         + (isAdmin ? ' · <a class="link" href="#/new">' + t('addProduct') + '</a>' : '') + '</div>')
     + '</section>';
+}
+function catSectionHTML(cat, items, isAdmin) {
+  return sectionHTML('cat-' + cat.id, cat, items, isAdmin);
 }
 function emptyHTML(kind, isAdmin) {
   if (kind === 'search') {
@@ -819,6 +1033,15 @@ function feedHTML(list, q, isAdmin) {
     if (!list.length) return emptyHTML('search', isAdmin);
     out += '<div class="result-bar"><span>' + t('searchResult') + ' <b>' + esc(state.query.trim()) + '</b></span>'
       + '<span class="result-n">' + list.length + ' ' + tc('pieces') + '</span></div>';
+  }
+  if (state.cat === 'new' || state.cat === 'hot') {
+    const isNew = state.cat === 'new';
+    const label = isNew
+      ? { zh: I18N.newSection[0], pt: I18N.newSection[1] }
+      : { zh: I18N.hotSection[0], pt: I18N.hotSection[1] };
+    const items = sortedProducts(list.filter((p) => (isNew ? p.isNew : p.starred)));
+    if (q && !items.length) return emptyHTML('search', isAdmin);
+    return out + sectionHTML('sec-' + state.cat, label, items, isAdmin);
   }
   const scope = state.cat === 'all' ? state.cats : state.cats.filter((c) => c.id === state.cat);
   scope.forEach((cat) => {
@@ -862,7 +1085,7 @@ function stockAreaHTML(p) {
     const has = sizes.some((s) => !!(c.stock && c.stock[s]));
     return '<button type="button" class="color' + (i === detailColor ? ' on' : '') + (has ? '' : ' oos') + '"'
       + ' data-act="color" data-i="' + i + '">'
-      + '<span class="dot" style="background:' + colorHex(c.zh) + '"></span>' + colorNameHTML(c) + '</button>';
+      + '<span class="dot" style="background:' + colorHex(c.zh, c.dictId) + '"></span>' + colorNameHTML(c) + '</button>';
   }).join('');
   const sizesHTML = sizes.map((s) => {
     const ok = !!(col.stock && col.stock[s]);
@@ -875,26 +1098,17 @@ function stockAreaHTML(p) {
     + '<span><i class="lg-dot no"></i>' + t('oos') + '</span>'
     + (anyStock ? '' : '<span class="lg-alert">' + t('soldOut') + '</span>') + '</div>';
 }
-function renderDetail(id) {
-  const p = state.products.find((x) => x.id === id);
-  if (!p || (!p.onShelf && !state.session)) {
-    return topbar({ back: '#/' }) + '<main class="wrap"><div class="empty" style="margin-top:26px">'
-      + '<div class="empty-ic">' + ic('alert', 24) + '</div><h3>' + t('notFound') + '</h3>'
-      + '<a class="btn btn-primary" href="#/">' + t('backHome') + '</a></div></main>';
-  }
-  if (lastProductId !== p.id) { lastProductId = p.id; detailColor = 0; }
-  if (detailColor >= p.colors.length) detailColor = 0;
-  const imgs = (p.images && p.images.length) ? p.images : [FALLBACK_ART];
-  const cat = catById(p.category);
-  const s = state.settings;
-  const tel = String(s.phone || '').replace(/[^\d+]/g, '');
-  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.mapQuery || s.address || '');
-  return topbar({ back: '#/' })
-    + '<div class="detail-page">'
-    + '<div class="gallery"><div class="gal-track" id="galTrack">'
-    + imgs.map((src, i) => '<div class="gal-slide"><img src="' + src + '" alt="' + esc((p.name.zh || '') + ' ' + (p.name.pt || '') + ' ' + (i + 1)) + '"'
-      + (i ? ' loading="lazy"' : '') + ' data-act="zoom" data-i="' + i + '"></div>').join('')
-    + '</div>'
+function galleryHTML(p) {
+  let imgs = galleryImages(p, detailColor);
+  if (!imgs.length) imgs = [{ src: FALLBACK_ART, specialTags: [] }];
+  const slides = imgs.map((img, i) => {
+    const tags = (img.specialTags || []).map((tg) => '<span class="gal-tag">' + tagHTML(tg) + '</span>').join('');
+    return '<div class="gal-slide"><img src="' + imgSrc(img) + '" alt="'
+      + esc((p.name.zh || '') + ' ' + (p.name.pt || '') + ' ' + (i + 1)) + '"'
+      + (i ? ' loading="lazy"' : '') + ' data-act="zoom" data-i="' + i + '">'
+      + (tags ? '<div class="gal-tags">' + tags + '</div>' : '') + '</div>';
+  }).join('');
+  return '<div class="gallery" id="gallery"><div class="gal-track" id="galTrack">' + slides + '</div>'
     + '<div class="gal-top"><span class="gal-hint">' + ic('eye', 13) + t('zoomHint') + '</span>'
     + '<span class="gal-count"><b id="galNow">1</b> / ' + imgs.length + '</span></div>'
     + (imgs.length > 1
@@ -904,7 +1118,24 @@ function renderDetail(id) {
           '<button type="button" class="' + (i === 0 ? 'on' : '') + '" data-act="gal-dot" data-i="' + i + '" aria-label="' + (i + 1) + '"></button>').join('')
         + '</div>'
       : '')
-    + '</div>'
+    + '</div>';
+}
+function renderDetail(id) {
+  const p = state.products.find((x) => x.id === id);
+  if (!p || (!p.onShelf && !state.session)) {
+    return topbar({ back: '#/' }) + '<main class="wrap"><div class="empty" style="margin-top:26px">'
+      + '<div class="empty-ic">' + ic('alert', 24) + '</div><h3>' + t('notFound') + '</h3>'
+      + '<a class="btn btn-primary" href="#/">' + t('backHome') + '</a></div></main>';
+  }
+  if (lastProductId !== p.id) { lastProductId = p.id; detailColor = 0; }
+  if (detailColor >= p.colors.length) detailColor = 0;
+  const cat = catById(p.category);
+  const s = state.settings;
+  const tel = String(s.phone || '').replace(/[^\d+]/g, '');
+  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.mapQuery || (s.address && s.address.pt) || '');
+  return topbar({ back: '#/' })
+    + '<div class="detail-page">'
+    + galleryHTML(p)
     + '<main class="detail-sheet">'
     + '<div class="d-card"><div class="d-flags">'
     + (cat ? '<span class="tag tag-cat">' + nm(cat) + '</span>' : '')
@@ -923,7 +1154,7 @@ function renderDetail(id) {
     + '<a class="contact-row" href="tel:' + esc(tel) + '"><span class="fi">' + ic('phone', 18) + '</span>'
     + '<span><small>' + t('phone') + '</small><b>' + esc(s.phone) + '</b></span></a>'
     + '<a class="contact-row" href="' + esc(map) + '" target="_blank" rel="noopener"><span class="fi">' + ic('pin', 18) + '</span>'
-    + '<span><small>' + t('address') + '</small><b>' + esc(s.address) + '</b></span></a>'
+    + '<span><small>' + t('address') + '</small><b>' + nm(s.address) + '</b></span></a>'
     + '<a class="btn btn-primary btn-block" href="tel:' + esc(tel) + '">' + ic('phone', 18) + t('callNow') + '</a>'
     + '</section>'
     + (state.session
@@ -956,26 +1187,44 @@ function bindGallery() {
  * 12. 管理后台
  * ------------------------------------------------------------------ */
 function tabName(tab) {
-  return tab === 'accounts' ? t('tabAccounts') : tab === 'settings' ? t('tabSettings') : t('tabProducts');
+  const map = { products: 'tabProducts', stockout: 'tabStockout', accounts: 'tabAccounts', settings: 'tabSettings' };
+  const e = I18N[map[tab] || 'tabProducts'];
+  if (state.lang === 'zh') return esc(e[0]);
+  if (state.lang === 'pt') return esc(e[1]);
+  return '<span class="tz">' + esc(e[0]) + '</span><span class="tp">' + esc(e[1]) + '</span>';
 }
-function adminProductsHTML() {
-  const list = sortedProducts(state.products);
+function adminFilterHTML() {
+  const items = [{ id: 'all', zh: I18N.filterAll[0], pt: I18N.filterAll[1] }].concat(state.cats);
+  return '<div class="filters admin-filters">' + items.map((c) =>
+    '<button type="button" class="filter-chip' + (state.adminCat === c.id ? ' on' : '') + '" data-act="adminfilter" data-cat="'
+    + esc(c.id) + '">' + nm(c) + '</button>').join('') + '</div>';
+}
+function adminProductsHTML(mode) {
+  const stockout = mode === 'stockout';
+  const all = sortedProducts(state.products);
+  const base = stockout ? all.filter(isSoldOut) : all;
+  const list = state.adminCat === 'all' ? base : base.filter((p) => p.category === state.adminCat);
+  const head = '<div class="admin-head"><div><h2>' + (stockout ? t('adminStockTitle') : t('allProducts')) + '</h2>'
+    + '<p>' + list.length + ' ' + tc('pieces') + '</p></div>'
+    + '<a class="btn btn-primary btn-sm" href="#/new">' + ic('plus', 16) + t('addProduct') + '</a></div>';
   if (!list.length) {
-    return '<div class="empty"><div class="empty-ic">' + ic('camera', 24) + '</div>'
-      + '<h3>' + t('emptyNone') + '</h3><p>' + t('emptyNoneHint') + '</p>'
+    return head + adminFilterHTML()
+      + '<div class="empty"><div class="empty-ic">' + ic(stockout ? 'check' : 'camera', 24) + '</div>'
+      + '<h3>' + t(stockout ? 'stockoutNone' : 'emptyNone') + '</h3>'
+      + (stockout ? '' : '<p>' + t('emptyNoneHint') + '</p>')
       + '<a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a></div>';
   }
-  return '<div class="admin-head"><div><h2>' + t('allProducts') + '</h2>'
-    + '<p>' + list.length + ' ' + tc('pieces') + ' · ' + state.cats.length + ' ' + tc('statCats') + '</p></div>'
-    + '<a class="btn btn-primary btn-sm" href="#/new">' + ic('plus', 16) + t('addProduct') + '</a></div>'
+  return head + adminFilterHTML()
     + '<div class="arows">' + list.map((p) => {
       const cat = catById(p.category);
+      const soldout = isSoldOut(p);
       return '<article class="arow' + (p.onShelf ? '' : ' is-off') + '">'
-        + '<div class="arow-thumb"><img src="' + ((p.images && p.images[0]) || FALLBACK_ART) + '" alt="" loading="lazy"></div>'
+        + '<div class="arow-thumb"><img src="' + coverImg(p) + '" alt="" loading="lazy"></div>'
         + '<div class="arow-body">'
         + '<div class="arow-top"><div class="arow-name">' + nm(p.name) + '</div>'
         + '<div class="arow-price">' + money(p.price) + '</div></div>'
-        + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span></div>'
+        + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span>'
+        + (soldout ? '<span class="stock-tag">' + tc('stockoutBadge') + '</span>' : '') + '</div>'
         + '<div class="arow-controls">'
         + '<button type="button" class="tgl' + (p.onShelf ? ' on' : '') + '" data-act="toggle" data-field="onShelf" data-id="' + esc(p.id) + '" aria-pressed="' + p.onShelf + '">'
         + '<span class="track"><i></i></span>' + tc(p.onShelf ? 'statusOn' : 'statusOff') + '</button>'
@@ -1004,6 +1253,16 @@ function accountsHTML() {
         + '</div></div>';
     }).join('') + '</div>';
 }
+function headerFieldHTML(key, labelKey) {
+  const v = headerVal(key);
+  const lim = LIMITS[key];
+  return '<div class="field" data-hfield="' + key + '">'
+    + '<label class="label">' + t(labelKey) + '<span class="opt">中 ≤' + lim.zh + ' · PT ≤' + lim.pt + '</span></label>'
+    + '<div class="two">'
+    + '<input class="input" id="set_' + key + '_zh" maxlength="' + lim.zh + '" value="' + esc(v.zh) + '" placeholder="中文" autocomplete="off">'
+    + '<input class="input" id="set_' + key + '_pt" maxlength="' + lim.pt + '" value="' + esc(v.pt) + '" placeholder="Português" autocomplete="off">'
+    + '</div><p class="ferr"></p></div>';
+}
 function settingsHTML() {
   const s = state.settings;
   const catsHTML = state.cats.map((c) => {
@@ -1014,12 +1273,26 @@ function settingsHTML() {
         + ' aria-label="' + esc(tt('delete')) + '" title="' + esc(tt('delete')) + '">' + ic('trash', 14) + '</button>')
       + '</div>';
   }).join('');
+  const dictHTML = state.colorDict.map((d) =>
+    '<div class="dict-row"><span class="dot" style="background:' + esc(d.hex || '#C9C4B5') + '"></span>'
+    + '<span class="dict-name">' + esc(d.zh) + '</span><span class="dict-pt">' + esc(d.pt) + '</span>'
+    + '<button type="button" class="mini-btn" data-act="editdict" data-id="' + esc(d.id) + '" aria-label="' + esc(tt('edit')) + '" title="' + esc(tt('edit')) + '">' + ic('edit', 14) + '</button></div>').join('');
   return '<section class="sect"><div class="sect-head"><h3>' + t('storeInfo') + '</h3></div>'
-    + '<div class="field"><label class="label" for="setPhone">' + t('storePhone') + '</label>'
-    + '<input class="input" id="setPhone" value="' + esc(s.phone) + '"></div>'
-    + '<div class="field"><label class="label" for="setAddr">' + t('storeAddr') + '</label>'
-    + '<input class="input" id="setAddr" value="' + esc(s.address) + '"></div>'
+    + '<div class="field"><label class="label" for="setPhone">' + t('storePhone') + '<span class="opt">≤' + LIMITS.phone.zh + '</span></label>'
+    + '<input class="input" id="setPhone" maxlength="' + LIMITS.phone.zh + '" value="' + esc(s.phone) + '"></div>'
+    + '<div class="field"><label class="label">' + t('storeAddr') + '<span class="opt">中 ≤' + LIMITS.address.zh + ' · PT ≤' + LIMITS.address.pt + '</span></label>'
+    + '<div class="two">'
+    + '<input class="input" id="setAddrZh" maxlength="' + LIMITS.address.zh + '" value="' + esc(s.address.zh) + '" placeholder="中文地址">'
+    + '<input class="input" id="setAddrPt" maxlength="' + LIMITS.address.pt + '" value="' + esc(s.address.pt) + '" placeholder="Endereço em português">'
+    + '</div><p class="ferr"></p></div>'
     + '<button type="button" class="btn btn-green" data-act="saveset">' + t('save') + '</button></section>'
+    + '<section class="sect"><div class="sect-head"><h3>' + t('fHeader') + '</h3><span class="hint">' + t('headerHint') + '</span></div>'
+    + headerFieldHTML('brand', 'brandName')
+    + headerFieldHTML('brandSub', 'brandSubLabel')
+    + headerFieldHTML('kicker', 'kickerLabel')
+    + headerFieldHTML('heroTitle', 'heroTitleLabel')
+    + headerFieldHTML('heroSub', 'heroSubLabel')
+    + '<button type="button" class="btn btn-green" data-act="saveheader">' + t('save') + '</button></section>'
     + '<section class="sect"><div class="sect-head"><h3>' + t('categories') + '</h3></div>'
     + '<div class="cat-list">' + catsHTML + '</div>'
     + '<div class="cat-add">'
@@ -1027,6 +1300,10 @@ function settingsHTML() {
     + '<input class="input" id="newCatPt" placeholder="Nome em português"></div>'
     + '<button type="button" class="btn btn-green" data-act="addcat">' + ic('plus', 16) + t('addCategory') + '</button>'
     + '</div></section>'
+    + '<section class="sect"><div class="sect-head"><h3>' + t('colorDictTitle') + '</h3><span class="hint">' + t('colorDictHint') + '</span></div>'
+    + '<div class="dict-list">' + dictHTML + '</div>'
+    + '<button type="button" class="btn btn-green btn-sm" data-act="adddict" style="margin-top:10px">' + ic('plus', 16) + t('addDictColor') + '</button>'
+    + '</section>'
     + '<section class="sect"><div class="sect-head"><h3>' + t('dataTitle') + '</h3></div>'
     + '<div class="row-btns"><button type="button" class="btn btn-ghost" data-act="export">' + ic('download', 16) + t('exportJson') + '</button>'
     + '<button type="button" class="btn btn-ghost" data-act="import">' + ic('upload', 16) + t('importJson') + '</button></div>'
@@ -1034,11 +1311,11 @@ function settingsHTML() {
     + '<input type="file" id="importFile" accept="application/json,.json" hidden></section>';
 }
 function renderAdmin(tab) {
-  const key = ['products', 'accounts', 'settings'].indexOf(tab) >= 0 ? tab : 'products';
-  const body = key === 'accounts' ? accountsHTML() : key === 'settings' ? settingsHTML() : adminProductsHTML();
+  const key = ['products', 'stockout', 'accounts', 'settings'].indexOf(tab) >= 0 ? tab : 'products';
+  const body = key === 'accounts' ? accountsHTML() : key === 'settings' ? settingsHTML() : adminProductsHTML(key);
   return topbar({ back: '#/', title: t('adminTitle'), hideAccount: true })
     + '<main class="wrap admin">'
-    + '<div class="tabs">' + ['products', 'accounts', 'settings'].map((k) =>
+    + '<div class="tabs">' + ['products', 'stockout', 'accounts', 'settings'].map((k) =>
       '<a class="tab' + (k === key ? ' on' : '') + '" href="#/admin/' + k + '">' + tabName(k) + '</a>').join('') + '</div>'
     + body
     + '<div class="admin-foot"><button type="button" class="btn btn-ghost" data-act="logout">' + ic('logout', 16) + t('logout') + '</button></div>'
@@ -1048,6 +1325,30 @@ function renderAdmin(tab) {
 /* ------------------------------------------------------------------ *
  * 13. 产品表单
  * ------------------------------------------------------------------ */
+function normalizeImagesForForm(list) {
+  const out = (list || []).map((img, i) => (typeof img === 'string'
+    ? { id: uid('img'), src: img, colorId: null, specialTags: [], isCover: i === 0 }
+    : {
+      id: img.id || uid('img'),
+      src: img.src,
+      colorId: img.colorId || null,
+      specialTags: (img.specialTags || []).map((t) => ({ zh: t.zh || '', pt: t.pt || '' })),
+      isCover: !!img.isCover
+    }));
+  if (out.length && !out.some((i) => i.isCover)) out[0].isCover = true;
+  let seen = false;
+  out.forEach((i) => { if (i.isCover) { if (seen) i.isCover = false; else seen = true; } });
+  return out;
+}
+function normalizeColorsForForm(list) {
+  return (list || []).map((c) => ({
+    id: c.id || uid('col'),
+    dictId: c.dictId || null,
+    zh: c.zh || '',
+    pt: c.pt || '',
+    stock: Object.assign({}, c.stock || {})
+  }));
+}
 function initForm(product) {
   const src = product || {
     id: null, category: (state.cats[0] || {}).id || '', name: { zh: '', pt: '' }, model: '', price: '',
@@ -1063,8 +1364,8 @@ function initForm(product) {
       model: src.model || '',
       price: src.price === 0 || src.price ? String(src.price).replace('.', ',') : '',
       sizes: (src.sizes || []).slice(),
-      colors: JSON.parse(JSON.stringify(src.colors || [])),
-      images: (src.images || []).slice(),
+      colors: normalizeColorsForForm(src.colors),
+      images: normalizeImagesForForm(src.images),
       onShelf: src.onShelf !== false,
       isNew: !!src.isNew,
       starred: !!src.starred
@@ -1073,22 +1374,128 @@ function initForm(product) {
 }
 function imagesHTML() {
   const d = F.data;
-  const tiles = d.images.map((src, i) =>
-    '<div class="img-tile"><img src="' + src + '" alt="">'
-    + '<button type="button" class="rm" data-act="rmimg" data-i="' + i + '" aria-label="' + esc(tt('delete')) + '">' + ic('x', 13) + '</button>'
-    + (i === 0 ? '<span class="cover-tag">' + t('coverLabel') + '</span>' : '') + '</div>').join('');
+  const tiles = d.images.map((img, i) => {
+    const col = d.colors.find((c) => c.id === img.colorId);
+    const tagCount = (img.specialTags || []).length;
+    return '<div class="img-tile" data-act="imgedit" data-i="' + i + '" role="button" tabindex="0" aria-label="' + esc(tt('imageEditor')) + ' ' + (i + 1) + '">'
+      + '<img src="' + imgSrc(img) + '" alt="">'
+      + (img.isCover ? '<span class="tile-cover">' + ic('star', 10, { fill: true, sw: 0 }) + t('coverLabel') + '</span>' : '')
+      + '<button type="button" class="rm" data-act="rmimg" data-i="' + i + '" aria-label="' + esc(tt('delete')) + '">' + ic('x', 13) + '</button>'
+      + '<div class="tile-meta">'
+      + (col
+        ? '<span class="tile-color"><i class="tile-dot" style="background:' + colorHex(col.zh, col.dictId) + '"></i>' + esc(oneName(col)) + '</span>'
+        : '<span class="tile-color muted">' + t('genericImage') + '</span>')
+      + (tagCount ? '<span class="tile-tag">#' + tagCount + '</span>' : '')
+      + '</div></div>';
+  }).join('');
   const add = d.images.length < 10
     ? '<button type="button" class="img-add" data-act="pick"><span>' + ic('camera', 22) + '</span><span>' + t('addPhoto') + '</span></button>'
     : '';
   return tiles + add;
 }
 function colorsEditorHTML() {
-  if (!F.data.colors.length) return '<p class="hint">' + t('noColors') + '</p>';
-  return F.data.colors.map((c, i) =>
-    '<div class="color-edit"><div class="ce-top"><span class="dot" style="background:' + colorHex(c.zh) + '"></span>'
-    + '<input class="ce-zh" data-ce="zh" data-i="' + i + '" value="' + esc(c.zh) + '" maxlength="12" aria-label="' + esc(tt('fColors')) + '">'
-    + '<button type="button" class="ce-rm" data-act="rmcolor" data-i="' + i + '" aria-label="' + esc(tt('delete')) + '">' + ic('x', 12) + '</button></div>'
-    + '<input class="ce-pt" data-ce="pt" data-i="' + i + '" value="' + esc(c.pt || '') + '" maxlength="24" placeholder="Português"></div>').join('');
+  const chips = F.data.colors.map((c, i) =>
+    '<span class="color-chip"><span class="dot" style="background:' + colorHex(c.zh, c.dictId) + '"></span>'
+    + '<span class="cc-name">' + esc(c.zh) + '</span>'
+    + (c.pt ? '<span class="cc-pt">' + esc(c.pt) + '</span>' : '')
+    + '<button type="button" class="ce-rm" data-act="rmcolor" data-i="' + i + '" aria-label="' + esc(tt('delete')) + '">' + ic('x', 12) + '</button></span>').join('');
+  const used = new Set(F.data.colors.map((c) => c.dictId).filter(Boolean));
+  const options = state.colorDict.filter((d) => !used.has(d.id))
+    .map((d) => '<option value="' + esc(d.id) + '">' + esc(d.zh) + ' · ' + esc(d.pt) + '</option>').join('');
+  return (F.data.colors.length ? '<div class="color-chips">' + chips + '</div>' : '<p class="hint">' + t('noColors') + '</p>')
+    + '<div class="color-add">'
+    + '<select class="input" id="colorPick"><option value="">' + esc(tt('chooseColor')) + '</option>' + options + '</select>'
+    + '<button type="button" class="btn btn-green" data-act="adddictcolor" aria-label="' + esc(tt('addDictColor')) + '">' + ic('plus', 20) + '</button>'
+    + '</div>'
+    + '<div class="color-custom">'
+    + '<p class="label" style="margin-top:12px">' + t('customColor') + '</p>'
+    + '<div class="two">'
+    + '<input class="input" id="newColorZh" maxlength="' + LIMITS.color.zh + '" placeholder="' + esc(tt('dictZh')) + '" autocomplete="off">'
+    + '<input class="input" id="newColorPt" maxlength="' + LIMITS.color.pt + '" placeholder="' + esc(tt('dictPt')) + '" autocomplete="off">'
+    + '</div>'
+    + '<p class="hint">' + t('customColorHint') + '</p>'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="addcustomcolor" style="margin-top:8px">' + ic('plus', 16) + t('addDictColor') + '</button>'
+    + '</div>';
+}
+function imageEditorHTML(i) {
+  const img = F.data.images[i];
+  if (!img) return '';
+  const colorBtns = '<button type="button" class="img-color-btn' + (!img.colorId ? ' on' : '') + '" data-act="imgcolor" data-cid="">'
+    + t('genericImage') + '</button>'
+    + F.data.colors.map((c) => '<button type="button" class="img-color-btn' + (img.colorId === c.id ? ' on' : '') + '" data-act="imgcolor" data-cid="' + esc(c.id) + '">'
+      + '<span class="dot" style="background:' + colorHex(c.zh, c.dictId) + '"></span>' + esc(oneName(c)) + '</button>').join('');
+  const tags = img.specialTags || [];
+  const presetBtns = SPECIAL_TAG_PRESETS.map((p) => {
+    const on = tags.some((t) => (t.zh && t.zh === p.zh) || (t.pt && t.pt === p.pt));
+    return '<button type="button" class="tag-chip' + (on ? ' on' : '') + '" data-act="imgtag" data-zh="' + esc(p.zh) + '">' + tagHTML(p) + '</button>';
+  }).join('');
+  const customTags = tags.map((t, ti) => {
+    if (SPECIAL_TAG_PRESETS.some((p) => p.zh === t.zh)) return '';
+    return '<span class="tag-chip on custom">' + tagHTML(t)
+      + '<button type="button" class="tag-x" data-act="rmtag" data-ti="' + ti + '" aria-label="' + esc(tt('delete')) + '">' + ic('x', 10) + '</button></span>';
+  }).join('');
+  return '<p class="hint" style="margin:0 0 10px">' + (i + 1) + ' / ' + F.data.images.length + '</p>'
+    + '<div class="img-editor-preview"><img src="' + imgSrc(img) + '" alt=""></div>'
+    + '<div class="field"><label class="label">' + t('imageColor') + '</label><div class="img-color-list">' + colorBtns + '</div></div>'
+    + '<div class="field"><label class="label">' + t('specialTags') + '</label>'
+    + '<div class="tag-list">' + presetBtns + (customTags ? '<span class="tag-sep"></span>' + customTags : '') + '</div>'
+    + '<div class="tag-add"><input class="input" id="newTagZh" maxlength="' + LIMITS.specialTag.zh + '" placeholder="中文标签" autocomplete="off">'
+    + '<input class="input" id="newTagPt" maxlength="' + LIMITS.specialTag.pt + '" placeholder="Tag em português" autocomplete="off">'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="addimgtag">' + ic('plus', 14) + t('addTag') + '</button></div>'
+    + '<p class="ferr" id="tagErr"></p></div>'
+    + '<div class="img-actions">'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="imgcover" title="' + esc(tt('setCover')) + '"' + (img.isCover ? ' disabled' : '') + '>' + ic('star', 15, { fill: true, sw: 0 }) + tc('coverShort') + '</button>'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="imgmove" data-dir="-1" title="' + esc(tt('movePrev')) + '"' + (i <= 0 ? ' disabled' : '') + '>' + ic('left', 15) + tc('prevShort') + '</button>'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="imgmove" data-dir="1" title="' + esc(tt('moveNext')) + '"' + (i >= F.data.images.length - 1 ? ' disabled' : '') + '>' + ic('right', 15) + tc('nextShort') + '</button>'
+    + '</div>'
+    + '<div class="img-actions"><button type="button" class="btn btn-danger" data-act="imgdel">' + ic('trash', 16) + t('delete') + '</button>'
+    + '<button type="button" class="btn btn-primary" data-act="imgdone">' + t('done') + '</button></div>';
+}
+function openImageEditor(i) {
+  if (!F || !F.data.images[i]) return;
+  openModal('<div class="modal-head"><h3>' + t('imageEditor') + '</h3>'
+    + '<button type="button" class="modal-x" data-act="imgdone" aria-label="close">' + ic('x', 16) + '</button></div>'
+    + '<div id="imgEditor">' + imageEditorHTML(i) + '</div>');
+  imgEditorIndex = i;
+}
+function refreshImageEditor() {
+  if (imgEditorIndex < 0 || !F || !F.data.images[imgEditorIndex]) { closeModal(true); return; }
+  const box = document.getElementById('imgEditor');
+  if (!box) return;
+  box.innerHTML = imageEditorHTML(imgEditorIndex);
+  renderImages();
+}
+function setTagError(key, extra) {
+  const err = document.getElementById('tagErr');
+  if (!err) return;
+  err.textContent = tt(key) + (extra ? ' (' + extra + ')' : '');
+  err.style.display = 'block';
+}
+function addImageTag() {
+  if (!F || imgEditorIndex < 0) return;
+  const zh = formVal('newTagZh');
+  const pt = formVal('newTagPt');
+  if (!zh || !pt) { setTagError('eTagFields'); return; }
+  if (zh.length > LIMITS.specialTag.zh) { setTagError('eTooLong', LIMITS.specialTag.zh); return; }
+  if (pt.length > LIMITS.specialTag.pt) { setTagError('eTooLong', LIMITS.specialTag.pt); return; }
+  const img = F.data.images[imgEditorIndex];
+  if (!img) return;
+  if ((img.specialTags || []).some((t) => t.zh === zh || (t.pt && t.pt.toLowerCase() === pt.toLowerCase()))) {
+    setTagError('eTagDup');
+    return;
+  }
+  img.specialTags.push({ zh, pt });
+  refreshImageEditor();
+}
+function toggleImageTag(zh) {
+  if (!F || imgEditorIndex < 0) return;
+  const preset = SPECIAL_TAG_PRESETS.find((p) => p.zh === zh);
+  const img = F.data.images[imgEditorIndex];
+  if (!preset || !img) return;
+  const idx = (img.specialTags || []).findIndex((t) => t.zh === preset.zh || (t.pt && t.pt === preset.pt));
+  if (idx >= 0) img.specialTags.splice(idx, 1);
+  else img.specialTags.push({ zh: preset.zh, pt: preset.pt });
+  refreshImageEditor();
 }
 function sizePickHTML() {
   return SIZE_ORDER.map((s) =>
@@ -1100,7 +1507,7 @@ function matrixHTML() {
   if (!F.data.colors.length || !sizes.length) return '<p class="hint">' + t('matrixHint') + '</p>';
   return '<div class="mx-scroll"><table class="mx"><thead><tr><th></th>'
     + sizes.map((s) => '<th>' + s + '</th>').join('') + '</tr></thead><tbody>'
-    + F.data.colors.map((c, ci) => '<tr><th class="mx-color"><span class="dot" style="background:' + colorHex(c.zh) + '"></span>' + esc(c.zh) + '</th>'
+    + F.data.colors.map((c, ci) => '<tr><th class="mx-color"><span class="dot" style="background:' + colorHex(c.zh, c.dictId) + '"></span>' + esc(c.zh) + '</th>'
       + sizes.map((s) => {
         const ok = !!(c.stock && c.stock[s]);
         return '<td><button type="button" class="mcell' + (ok ? '' : ' no') + '" data-act="cell" data-ci="' + ci + '" data-sz="' + s
@@ -1134,10 +1541,10 @@ function renderForm(editId) {
     + '</select><p class="ferr"></p></div>'
     + '<div class="two">'
     + '<div class="field"><label class="label" for="fNameZh">' + t('fNameZh') + '<span class="req">*</span></label>'
-    + '<input class="input" id="fNameZh" data-f="name.zh" maxlength="40" value="' + esc(d.name.zh) + '" autocomplete="off">'
+    + '<input class="input" id="fNameZh" data-f="name.zh" maxlength="' + LIMITS.name.zh + '" value="' + esc(d.name.zh) + '" autocomplete="off">'
     + '<p class="ferr"></p></div>'
     + '<div class="field"><label class="label" for="fNamePt">' + t('fNamePt') + '</label>'
-    + '<input class="input" id="fNamePt" data-f="name.pt" maxlength="60" value="' + esc(d.name.pt) + '" autocomplete="off">'
+    + '<input class="input" id="fNamePt" data-f="name.pt" maxlength="' + LIMITS.name.pt + '" value="' + esc(d.name.pt) + '" autocomplete="off">'
     + '<p class="ferr"></p></div></div>'
     + '<div class="two">'
     + '<div class="field"><label class="label" for="fModel">' + t('fModel') + '<span class="req">*</span></label>'
@@ -1148,14 +1555,13 @@ function renderForm(editId) {
     + '<p class="ferr"></p></div></div>'
     + '</section>'
     + '<section class="sect"><div class="sect-head"><span class="num">2</span><h3>' + t('fImages') + '</h3><span class="hint">' + t('photoHint') + '</span></div>'
+    + '<p class="hint" style="margin:-4px 0 10px">' + t('imageHint') + '</p>'
     + '<div class="img-grid" id="imgGrid">' + imagesHTML() + '</div>'
     + '<input type="file" id="fImages" accept="image/jpeg,image/png,image/webp" multiple hidden>'
     + '<p class="ferr" id="imgErr"></p></section>'
     + '<section class="sect"><div class="sect-head"><span class="num">3</span><h3>' + t('fTags') + '</h3></div>'
     + '<div class="field"><label class="label">' + t('fColors') + '<span class="req">*</span></label>'
-    + '<div class="color-list" id="colorList">' + colorsEditorHTML() + '</div>'
-    + '<div class="color-add"><input class="input" id="newColor" placeholder="' + esc(tt('colorPh')) + '" maxlength="12" autocomplete="off">'
-    + '<button type="button" class="btn btn-green" data-act="addcolor" aria-label="' + esc(tt('fColors')) + '">' + ic('plus', 20) + '</button></div>'
+    + '<div id="colorList">' + colorsEditorHTML() + '</div>'
     + '<p class="ferr" id="colorErr"></p></div>'
     + '<div class="field"><label class="label">' + t('fSizes') + '<span class="req">*</span></label>'
     + '<div class="size-pick" id="sizePick">' + sizePickHTML() + '</div>'
@@ -1184,7 +1590,7 @@ function renderLogin() {
     + '<div class="auth-lang">' + langHTML() + '</div>'
     + '<div class="auth-inner">'
     + '<a class="auth-brand" href="#/"><span class="brand-mark" aria-hidden="true"></span>'
-    + '<span class="brand-text"><b>XLZ</b><small>ATACADO</small></span></a>'
+    + '<span class="brand-text"><b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></span></a>'
     + '<div class="auth-card"><h1 class="auth-title">' + authTitleHTML() + '</h1><p>' + t('loginSub') + '</p>'
     + '<div class="field"><label class="label" for="lgUser">' + t('username') + '</label>'
     + '<input class="input" id="lgUser" autocomplete="username" autocapitalize="none" spellcheck="false"></div>'
@@ -1192,7 +1598,6 @@ function renderLogin() {
     + '<input class="input" id="lgPass" type="password" autocomplete="current-password"></div>'
     + '<p class="ferr" id="lgErr"></p>'
     + '<button type="button" class="btn btn-primary btn-block" data-act="doLogin">' + t('loginBtn') + '</button>'
-    + '<div class="auth-hint"><b>' + t('loginDemo') + '</b><span>admin / admin123 · staff / staff123</span></div>'
     + '</div><a class="auth-back" href="#/">' + ic('back', 16) + t('backHome') + '</a></div></div>';
 }
 function authTitleHTML() {
@@ -1225,6 +1630,10 @@ function closeModal(result) {
   modalEl.remove();
   modalEl = null;
   document.body.classList.remove('locked');
+  if (imgEditorIndex >= 0) {
+    imgEditorIndex = -1;
+    if (F) renderImages();
+  }
   if (modalResolve) {
     const resolve = modalResolve;
     modalResolve = null;
@@ -1389,12 +1798,6 @@ function bindForm() {
       addFiles(files);
     });
   }
-  const color = document.getElementById('newColor');
-  if (color) {
-    color.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); addColor(); }
-    });
-  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -1417,16 +1820,36 @@ function renderMatrix() {
   const box = document.getElementById('matrix');
   if (box && F) box.innerHTML = matrixHTML();
 }
-function addColor() {
+function formVal(id) {
+  const el = document.getElementById(id);
+  return el ? String(el.value || '').trim() : '';
+}
+function addDictColor() {
   if (!F) return;
-  const input = document.getElementById('newColor');
-  const name = (input.value || '').trim();
-  if (!name) return;
-  if (F.data.colors.some((c) => c.zh === name)) { toast(t('eColorDup')); return; }
+  const id = formVal('colorPick');
+  if (!id) { addCustomColor(); return; }
+  const d = dictById(id);
+  if (!d) return;
+  if (F.data.colors.some((c) => c.dictId === id)) { toast(t('eColorDup')); return; }
   const stock = {};
   F.data.sizes.forEach((s) => { stock[s] = true; });
-  F.data.colors.push({ zh: name, pt: ptColor(name), stock });
-  input.value = '';
+  F.data.colors.push({ id: uid('col'), dictId: id, zh: d.zh, pt: d.pt, stock });
+  renderColors();
+  renderMatrix();
+}
+function addCustomColor() {
+  if (!F) return;
+  const zh = formVal('newColorZh');
+  const pt = formVal('newColorPt');
+  clearFieldError('colorErr');
+  if (!zh) { setFieldError('colorErr', 'eColorZh'); return; }
+  if (zh.length > LIMITS.color.zh) { setFieldError('colorErr', 'eTooLong', LIMITS.color.zh); return; }
+  if (!pt) { setFieldError('colorErr', 'eColorPt'); return; }
+  if (pt.length > LIMITS.color.pt) { setFieldError('colorErr', 'eTooLong', LIMITS.color.pt); return; }
+  if (F.data.colors.some((c) => c.zh === zh || (c.pt && c.pt.toLowerCase() === pt.toLowerCase()))) { toast(t('eColorDup')); return; }
+  const stock = {};
+  F.data.sizes.forEach((s) => { stock[s] = true; });
+  F.data.colors.push({ id: uid('col'), dictId: null, zh, pt, stock });
   renderColors();
   renderMatrix();
 }
@@ -1472,7 +1895,13 @@ async function addFiles(files) {
     if (file.size > 5 * 1024 * 1024) { toast(t('eFileSize')); continue; }
     try {
       const data = await compressImage(file);
-      F.data.images.push(data);
+      F.data.images.push({
+        id: uid('img'),
+        src: data,
+        colorId: null,
+        specialTags: [],
+        isCover: F.data.images.length === 0
+      });
       renderImages();
     } catch (e) { toast(t('eFileType')); }
   }
@@ -1487,14 +1916,20 @@ function setPath(obj, path, value) {
   }
   cur[keys[keys.length - 1]] = value;
 }
-function setFieldError(id, key) {
+function setFieldError(id, key, extra) {
   const el = document.getElementById(id);
   if (!el) return;
   const box = el.closest('.field') || el.closest('.sect');
   if (!box) return;
   box.classList.add('invalid');
   const msg = box.querySelector('.ferr');
-  if (msg) msg.textContent = tt(key);
+  if (msg) msg.textContent = tt(key) + (extra ? ' (' + extra + ')' : '');
+}
+function clearFieldError(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const box = el.closest('.field') || el.closest('.sect');
+  if (box) box.classList.remove('invalid');
 }
 function clearFormErrors() {
   $$('.field.invalid, .sect.invalid').forEach((el) => el.classList.remove('invalid'));
@@ -1505,35 +1940,74 @@ function saveForm() {
   clearFormErrors();
   const d = F.data;
   const errs = [];
-  if (!String(d.name.zh || '').trim()) errs.push(['fNameZh', 'eName']);
-  if (!String(d.model || '').trim()) errs.push(['fModel', 'eModel']);
+  const zhName = String(d.name.zh || '').trim();
+  const ptName = String(d.name.pt || '').trim();
+  const model = String(d.model || '').trim();
   const price = parseFloat(String(d.price || '').replace(',', '.'));
+  if (!zhName) errs.push(['fNameZh', 'eName']);
+  else if (zhName.length > LIMITS.name.zh) errs.push(['fNameZh', 'eTooLong', LIMITS.name.zh]);
+  if (ptName.length > LIMITS.name.pt) errs.push(['fNamePt', 'eTooLong', LIMITS.name.pt]);
+  if (!model) errs.push(['fModel', 'eModel']);
+  else if (model.length > LIMITS.model.zh) errs.push(['fModel', 'eTooLong', LIMITS.model.zh]);
   if (!isFinite(price) || price <= 0) errs.push(['fPrice', 'ePrice']);
   if (!d.images.length) errs.push(['imgErr', 'eImages']);
+  const badTag = d.images.some((img) => (img.specialTags || []).some((tg) =>
+    (tg.zh || '').length > LIMITS.specialTag.zh || (tg.pt || '').length > LIMITS.specialTag.pt));
+  if (badTag) errs.push(['imgErr', 'eTooLong', LIMITS.specialTag.zh + '/' + LIMITS.specialTag.pt]);
   if (!d.colors.length) errs.push(['colorErr', 'eColors']);
+  else {
+    const badColor = d.colors.find((c) => !c.zh || c.zh.length > LIMITS.color.zh || !c.pt || c.pt.length > LIMITS.color.pt);
+    if (badColor) {
+      if (!badColor.zh) errs.push(['colorErr', 'eColorZh']);
+      else if (!badColor.pt) errs.push(['colorErr', 'eColorPt']);
+      else errs.push(['colorErr', 'eTooLong', LIMITS.color.zh + '/' + LIMITS.color.pt]);
+    }
+  }
   if (!d.sizes.length) errs.push(['sizeErr', 'eSizes']);
   if (!d.category) errs.push(['fCat', 'eNoCat']);
   if (errs.length) {
-    errs.forEach(([id, key]) => setFieldError(id, key));
+    errs.forEach(([id, key, extra]) => setFieldError(id, key, extra));
     toast(t('eFields'));
     const first = $('.field.invalid, .sect.invalid');
     if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
   const colors = d.colors.map((c) => {
+    let zh = String(c.zh || '').trim();
+    let pt = String(c.pt || '').trim();
+    let dictId = c.dictId || null;
+    if (dictId) {
+      const dd = dictById(dictId);
+      if (dd) { zh = dd.zh; pt = dd.pt; } else { dictId = null; }
+    }
     const stock = {};
     d.sizes.forEach((s) => { stock[s] = !!(c.stock && c.stock[s]); });
-    return { zh: String(c.zh || '').trim() || '未命名', pt: String(c.pt || '').trim(), stock };
+    return { id: c.id || uid('col'), dictId, zh, pt, stock };
+  });
+  const images = d.images.map((img) => ({
+    id: img.id || uid('img'),
+    src: img.src,
+    colorId: colors.some((c) => c.id === img.colorId) ? img.colorId : null,
+    specialTags: (img.specialTags || []).map((tg) => ({
+      zh: String(tg.zh || '').trim(),
+      pt: String(tg.pt || '').trim()
+    })).filter((tg) => tg.zh || tg.pt),
+    isCover: !!img.isCover
+  }));
+  if (images.length && !images.some((i) => i.isCover)) images[0].isCover = true;
+  let coverSeen = false;
+  images.forEach((i) => {
+    if (i.isCover) { if (coverSeen) i.isCover = false; else coverSeen = true; }
   });
   const product = {
     id: F.id || uid('p'),
     category: d.category,
-    name: { zh: String(d.name.zh).trim(), pt: String(d.name.pt || '').trim() },
-    model: String(d.model).trim(),
+    name: { zh: zhName, pt: ptName },
+    model,
     price: Math.round(price * 100) / 100,
     sizes: SIZE_ORDER.filter((s) => d.sizes.indexOf(s) >= 0),
     colors,
-    images: d.images.slice(),
+    images,
     onShelf: !!d.onShelf,
     isNew: !!d.isNew,
     starred: !!d.starred,
@@ -1695,14 +2169,101 @@ function toggleProductFlag(id, field) {
   if (saveProducts()) render();
 }
 function saveStoreSettings() {
-  const phone = ($('#setPhone') || {}).value || '';
-  const addr = ($('#setAddr') || {}).value || '';
-  state.settings.phone = phone.trim();
-  state.settings.address = addr.trim();
-  state.settings.mapQuery = addr.trim();
+  clearFormErrors();
+  const phone = formVal('setPhone');
+  const zh = formVal('setAddrZh');
+  const pt = formVal('setAddrPt');
+  const errs = [];
+  if (phone.length > LIMITS.phone.zh) errs.push(['setPhone', 'eTooLong', LIMITS.phone.zh]);
+  if (zh.length > LIMITS.address.zh) errs.push(['setAddrZh', 'eTooLong', LIMITS.address.zh]);
+  if (pt.length > LIMITS.address.pt) errs.push(['setAddrPt', 'eTooLong', LIMITS.address.pt]);
+  if (errs.length) {
+    errs.forEach(([id, key, extra]) => setFieldError(id, key, extra));
+    toast(t('eFields'));
+    return;
+  }
+  state.settings.phone = phone;
+  state.settings.address = { zh, pt };
+  state.settings.mapQuery = pt || zh;
   saveSettings();
   toast(t('sSaved'));
   render();
+}
+function saveHeaderSettings() {
+  clearFormErrors();
+  const keys = ['brand', 'brandSub', 'kicker', 'heroTitle', 'heroSub'];
+  const vals = {};
+  const errs = [];
+  keys.forEach((k) => {
+    const lim = LIMITS[k];
+    const zh = formVal('set_' + k + '_zh');
+    const pt = formVal('set_' + k + '_pt');
+    if (zh.length > lim.zh) errs.push(['set_' + k + '_zh', 'eTooLong', lim.zh]);
+    else if (pt.length > lim.pt) errs.push(['set_' + k + '_pt', 'eTooLong', lim.pt]);
+    vals[k] = { zh, pt };
+  });
+  if (errs.length) {
+    errs.forEach(([id, key, extra]) => setFieldError(id, key, extra));
+    toast(t('eFields'));
+    return;
+  }
+  Object.assign(state.settings, vals);
+  saveSettings();
+  toast(t('sHeaderSaved'));
+  render();
+}
+function openDictEditor(id) {
+  const entry = id ? dictById(id) : null;
+  const wrap = openModal(
+    '<div class="modal-head"><h3>' + (entry ? t('editDictColor') : t('addDictColor')) + '</h3>'
+    + '<button type="button" class="modal-x" data-role="close" aria-label="close">' + ic('x', 16) + '</button></div>'
+    + '<div class="field"><label class="label" for="dictZh">' + t('dictZh') + '</label>'
+    + '<input class="input" id="dictZh" maxlength="' + LIMITS.color.zh + '" value="' + esc(entry ? entry.zh : '') + '" autocomplete="off"></div>'
+    + '<div class="field"><label class="label" for="dictPt">' + t('dictPt') + '</label>'
+    + '<input class="input" id="dictPt" maxlength="' + LIMITS.color.pt + '" value="' + esc(entry ? entry.pt : '') + '" autocomplete="off">'
+    + '<p class="ferr" id="dictErr"></p></div>'
+    + '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-role="no">' + t('cancel') + '</button>'
+    + '<button type="button" class="btn btn-primary" id="dictSave">' + t('save') + '</button></div>'
+  );
+  const save = () => {
+    const zh = formVal('dictZh');
+    const pt = formVal('dictPt');
+    const err = $('#dictErr', wrap);
+    const fail = (key, extra) => {
+      if (err) { err.textContent = tt(key) + (extra ? ' (' + extra + ')' : ''); err.style.display = 'block'; }
+    };
+    if (!zh) return fail('eColorZh');
+    if (!pt) return fail('eColorPt');
+    if (zh.length > LIMITS.color.zh) return fail('eTooLong', LIMITS.color.zh);
+    if (pt.length > LIMITS.color.pt) return fail('eTooLong', LIMITS.color.pt);
+    const dup = state.colorDict.some((c) => c !== entry && (c.zh === zh || String(c.pt).toLowerCase() === pt.toLowerCase()));
+    if (dup) return fail('eDictDup');
+    if (entry) {
+      entry.zh = zh;
+      entry.pt = pt;
+    } else {
+      state.colorDict.push({ id: 'c' + now().toString(36) + Math.random().toString(36).slice(2, 4), zh, pt, hex: '#C9C4B5' });
+    }
+    saveColorDict();
+    if (syncColorsFromDict()) saveProducts();
+    if (F) {
+      F.data.colors.forEach((c) => {
+        if (!c.dictId) return;
+        const d = dictById(c.dictId);
+        if (d) { c.zh = d.zh; c.pt = d.pt; }
+      });
+    }
+    closeModal(true);
+    toast(t('sDictSaved'));
+    render();
+  };
+  $('#dictSave', wrap).addEventListener('click', save);
+  ['dictZh', 'dictPt'].forEach((fid) => {
+    const inp = document.getElementById(fid);
+    if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  });
+  wrap.querySelector('[data-role="close"]').addEventListener('click', () => closeModal(false));
+  wrap.querySelector('[data-role="no"]').addEventListener('click', () => closeModal(false));
 }
 function addCategory() {
   const zh = (($('#newCatZh') || {}).value || '').trim();
@@ -1725,14 +2286,16 @@ async function deleteCategory(id) {
   if (!ok) return;
   state.cats = state.cats.filter((c) => c.id !== id);
   if (state.cat === id) state.cat = 'all';
+  if (state.adminCat === id) state.adminCat = 'all';
   saveCats();
   toast(t('sCatDel'));
   render();
 }
 function exportData() {
   const data = {
-    app: 'xlz-showcase', version: 1, at: new Date().toISOString(),
-    products: state.products, admins: state.admins, cats: state.cats, settings: state.settings
+    app: 'xlz-showcase', version: 2, at: new Date().toISOString(),
+    products: state.products, admins: state.admins, cats: state.cats,
+    settings: state.settings, colorDict: state.colorDict
   };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1754,11 +2317,15 @@ async function importData(file) {
     state.products = data.products;
     if (Array.isArray(data.admins) && data.admins.length) state.admins = data.admins;
     if (Array.isArray(data.cats) && data.cats.length) state.cats = data.cats;
-    if (data.settings) state.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings);
+    if (Array.isArray(data.colorDict) && data.colorDict.length) state.colorDict = data.colorDict;
+    state.settings = mergeSettings(data.settings);
+    state.products.forEach((p) => migrateProduct(p));
+    syncColorsFromDict();
     writeLS(KEY.products, state.products);
     writeLS(KEY.admins, state.admins);
     writeLS(KEY.cats, state.cats);
     writeLS(KEY.settings, state.settings);
+    writeLS(KEY.colorDict, state.colorDict);
     if (state.session && !state.admins.some((a) => a.u === state.session.u)) {
       state.session = null;
       localStorage.removeItem(KEY.session);
@@ -1820,17 +2387,24 @@ function onClick(e) {
     case 'zoom': {
       const p = currentProduct();
       if (!p) break;
-      openLightbox((p.images && p.images.length) ? p.images : [FALLBACK_ART], Number(el.getAttribute('data-i')) || 0);
+      let imgs = galleryImages(p, detailColor);
+      if (!imgs.length) imgs = [{ src: FALLBACK_ART }];
+      openLightbox(imgs.map(imgSrc), Number(el.getAttribute('data-i')) || 0);
       break;
     }
-    case 'color':
+    case 'color': {
       detailColor = Number(el.getAttribute('data-i')) || 0;
-      {
-        const p = currentProduct();
-        const box = document.getElementById('stockArea');
-        if (p && box) box.innerHTML = stockAreaHTML(p);
+      const p = currentProduct();
+      if (!p) break;
+      const box = document.getElementById('stockArea');
+      if (box) box.innerHTML = stockAreaHTML(p);
+      const old = document.getElementById('gallery');
+      if (old) {
+        old.outerHTML = galleryHTML(p);
+        bindGallery();
       }
       break;
+    }
     case 'del': deleteProduct(el.getAttribute('data-id')); break;
     case 'toggle': toggleProductFlag(el.getAttribute('data-id'), el.getAttribute('data-field')); break;
     case 'logout': logout(); break;
@@ -1839,6 +2413,13 @@ function onClick(e) {
     case 'delacc': deleteAccount(el.getAttribute('data-u')); break;
     case 'doLogin': doLogin(); break;
     case 'saveset': saveStoreSettings(); break;
+    case 'saveheader': saveHeaderSettings(); break;
+    case 'adminfilter':
+      state.adminCat = el.getAttribute('data-cat');
+      render();
+      break;
+    case 'adddict': openDictEditor(null); break;
+    case 'editdict': openDictEditor(el.getAttribute('data-id')); break;
     case 'addcat': addCategory(); break;
     case 'delcat': deleteCategory(el.getAttribute('data-id')); break;
     case 'export': exportData(); break;
@@ -1854,14 +2435,80 @@ function onClick(e) {
     }
     case 'rmimg': {
       if (!F) break;
-      F.data.images.splice(Number(el.getAttribute('data-i')), 1);
+      const i = Number(el.getAttribute('data-i'));
+      const wasCover = F.data.images[i] && F.data.images[i].isCover;
+      F.data.images.splice(i, 1);
+      if (F.data.images.length && wasCover) F.data.images[0].isCover = true;
+      if (F.data.images.length && !F.data.images.some((x) => x.isCover)) F.data.images[0].isCover = true;
       renderImages();
       break;
     }
-    case 'addcolor': addColor(); break;
+    case 'imgedit': openImageEditor(Number(el.getAttribute('data-i'))); break;
+    case 'imgcolor': {
+      if (!F || imgEditorIndex < 0) break;
+      const cid = el.getAttribute('data-cid') || null;
+      const img = F.data.images[imgEditorIndex];
+      if (!img) break;
+      img.colorId = cid && F.data.colors.some((c) => c.id === cid) ? cid : null;
+      refreshImageEditor();
+      break;
+    }
+    case 'imgtag': toggleImageTag(el.getAttribute('data-zh')); break;
+    case 'rmtag': {
+      if (!F || imgEditorIndex < 0) break;
+      const img = F.data.images[imgEditorIndex];
+      if (!img) break;
+      img.specialTags.splice(Number(el.getAttribute('data-ti')), 1);
+      refreshImageEditor();
+      break;
+    }
+    case 'addimgtag': addImageTag(); break;
+    case 'imgcover': {
+      if (!F || imgEditorIndex < 0) break;
+      F.data.images.forEach((img, k) => { img.isCover = k === imgEditorIndex; });
+      refreshImageEditor();
+      break;
+    }
+    case 'imgmove': {
+      if (!F || imgEditorIndex < 0) break;
+      const dir = Number(el.getAttribute('data-dir'));
+      const j = imgEditorIndex + dir;
+      if (j < 0 || j >= F.data.images.length) break;
+      const tmp = F.data.images[imgEditorIndex];
+      F.data.images[imgEditorIndex] = F.data.images[j];
+      F.data.images[j] = tmp;
+      imgEditorIndex = j;
+      refreshImageEditor();
+      break;
+    }
+    case 'imgdel': {
+      if (!F || imgEditorIndex < 0) break;
+      const wasCover = F.data.images[imgEditorIndex].isCover;
+      F.data.images.splice(imgEditorIndex, 1);
+      if (F.data.images.length && (wasCover || !F.data.images.some((x) => x.isCover))) F.data.images[0].isCover = true;
+      if (!F.data.images.length) {
+        imgEditorIndex = -1;
+        closeModal(true);
+        renderImages();
+      } else {
+        imgEditorIndex = Math.min(imgEditorIndex, F.data.images.length - 1);
+        refreshImageEditor();
+      }
+      break;
+    }
+    case 'imgdone':
+      closeModal(true);
+      if (F) renderImages();
+      break;
+    case 'adddictcolor': addDictColor(); break;
+    case 'addcustomcolor': addCustomColor(); break;
+    case 'addcolor': addCustomColor(); break;
     case 'rmcolor': {
       if (!F) break;
-      F.data.colors.splice(Number(el.getAttribute('data-i')), 1);
+      const rmIndex = Number(el.getAttribute('data-i'));
+      const removed = F.data.colors[rmIndex];
+      F.data.colors.splice(rmIndex, 1);
+      if (removed) F.data.images.forEach((img) => { if (img.colorId === removed.id) img.colorId = null; });
       renderColors();
       renderMatrix();
       break;
@@ -1919,17 +2566,6 @@ function onInput(e) {
   }
   if (!F) return;
   if (el.dataset && el.dataset.f) setPath(F.data, el.dataset.f, el.value);
-  if (el.dataset && el.dataset.ce) {
-    const i = Number(el.dataset.i);
-    const key = el.dataset.ce;
-    if (F.data.colors[i]) {
-      F.data.colors[i][key] = el.value;
-      if (key === 'zh') {
-        const dot = el.closest('.ce-top') && el.closest('.ce-top').querySelector('.dot');
-        if (dot) dot.style.background = colorHex(el.value);
-      }
-    }
-  }
   const field = el.closest('.field');
   if (field) field.classList.remove('invalid');
 }
@@ -1941,6 +2577,11 @@ function onKey(e) {
   if (e.key === 'Enter' && e.target && e.target.id === 'lgPass') {
     e.preventDefault();
     doLogin();
+  }
+  if (e.key === 'Enter' && e.target) {
+    const id = e.target.id;
+    if (id === 'newColorZh' || id === 'newColorPt') { e.preventDefault(); addCustomColor(); }
+    if (id === 'newTagZh' || id === 'newTagPt') { e.preventDefault(); addImageTag(); }
   }
   if ((e.key === 'Enter' || e.key === ' ') && e.target) {
     const card = e.target.closest('.card[data-act="open"]');
