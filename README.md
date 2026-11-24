@@ -6,7 +6,7 @@
 
 ## 快速开始
 
-1. 双击 `index.html`（推荐 Chrome / Edge，窗口宽度 390–430px 最接近手机效果）。
+1. 双击 `public/index.html`（推荐 Chrome / Edge，窗口宽度 390–430px 最接近手机效果）。
 2. 访客无需登录即可浏览、搜索、查看详情。
 3. 管理员入口在右上角「登录」或页脚「管理员登录」。
 
@@ -76,12 +76,13 @@
 
 ```
 xlz-showcase/
-├─ index.html        入口
-├─ styles.css        设计系统与全部样式
-├─ app.js            数据层 / 路由 / 渲染 / 交互
+├─ public/           部署目录（Cloudflare Pages 输出）
+│  ├─ index.html     入口
+│  ├─ styles.css     设计系统与全部样式
+│  ├─ app.js         数据层 / 路由 / 渲染 / 交互
+│  ├─ _headers       Cloudflare Pages 安全响应头
+│  └─ 404.html       自定义 404 页
 ├─ preview/          页面预览图
-├─ _headers          Cloudflare Pages 安全响应头
-├─ 404.html          自定义 404 页
 ├─ .gitignore
 └─ README.md
 ```
@@ -103,8 +104,8 @@ xlz-showcase/
 | 配置项 | 填写 |
 | --- | --- |
 | Framework preset | None |
-| Build command | 留空 |
-| Build output directory | `/` |
+| Build command | `exit 0` |
+| Build output directory | `public` |
 | Root directory | `/` |
 
 路径：**Workers & Pages → Create → Pages → Connect to Git → 选择仓库 → 按上表填写 → Save and Deploy**。
@@ -112,7 +113,7 @@ xlz-showcase/
 如使用 CLI 直传（需要先登录 Cloudflare）：
 
 ```bash
-npx wrangler pages deploy . --project-name=xlz-showcase --branch=main
+npx wrangler pages deploy public --project-name=xlz-showcase --branch=main
 ```
 
 `_headers` 会为所有响应加上 `nosniff`、`SAMEORIGIN`、`Referrer-Policy` 等安全头；`404.html` 用于未知路径并引导回首页。
@@ -121,7 +122,7 @@ npx wrangler pages deploy . --project-name=xlz-showcase --branch=main
 
 ## 更新方法
 
-1. 本地修改 `index.html` / `styles.css` / `app.js`，双击 `index.html` 预览。
+1. 本地修改 `public/index.html` / `public/styles.css` / `public/app.js`，双击 `public/index.html` 预览。
 2. 提交并推送：
 
    ```bash
