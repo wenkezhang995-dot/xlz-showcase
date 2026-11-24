@@ -1,0 +1,15 @@
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local browser / test artifacts
+.chrome-*
+shots/
+*.log
+
+# Local env & tooling
+.env
+.env.*
+node_modules/
+.wrangler/
