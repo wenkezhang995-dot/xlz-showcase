@@ -98,7 +98,13 @@ const DEFAULT_SETTINGS = {
   brandSub: { zh: 'ATACADO', pt: 'ATACADO' },
   kicker: { zh: '2026 秋冬系列', pt: 'Coleção 2026' },
   heroTitle: { zh: '本周上新', pt: 'Novo drop' },
-  heroSub: { zh: '圣保罗档口现货 · 支持拿货', pt: 'Peças prontas em São Paulo para revenda' }
+  heroSub: { zh: '圣保罗档口现货 · 支持拿货', pt: 'Peças prontas em São Paulo para revenda' },
+  social: {
+    whatsapp: { url: '', qr: '' },
+    tiktok: { url: '', qr: '' },
+    instagram: { url: '', qr: '' },
+    facebook: { url: '', qr: '' }
+  }
 };
 const LIMITS = {
   brand: { zh: 12, pt: 12 },
@@ -118,6 +124,12 @@ const SPECIAL_TAG_PRESETS = [
   { zh: '领口细节', pt: 'Detalhe da gola' },
   { zh: '口袋细节', pt: 'Detalhe do bolso' },
   { zh: '裤腰细节', pt: 'Detalhe do cós' }
+];
+const SOCIAL_NETS = [
+  { key: 'whatsapp', label: 'WhatsApp', icon: 'whatsapp' },
+  { key: 'tiktok', label: 'TikTok', icon: 'tiktok' },
+  { key: 'instagram', label: 'Instagram', icon: 'instagram' },
+  { key: 'facebook', label: 'Facebook', icon: 'facebook' }
 ];
 
 const state = {
@@ -166,6 +178,17 @@ const I18N = {
   formEdit: ['编辑产品', 'Editar produto'],
   notFound: ['产品不存在或已下架', 'Produto indisponível'],
   price: ['售价', 'Preço'],
+  wholesale: ['批发价', 'Preço de atacado'],
+  contactSeller: ['联系商家', 'Contatar loja'],
+  wholesaleHint: ['选填；选择「联系商家」时显示按钮', 'Opcional; mostra um botão ao escolher "Contatar loja"'],
+  eWholesale: ['请填写有效的批发价（最多两位小数）', 'Informe um preço de atacado válido (até 2 casas)'],
+  socialTitle: ['社交账号', 'Redes sociais'],
+  socialHint: ['留空不显示；二维码支持 JPG / PNG / WebP，≤5MB', 'Vazio não aparece; QR em JPG / PNG / WebP, ≤5MB'],
+  socialUrl: ['主页链接', 'Link do perfil'],
+  uploadQr: ['上传二维码', 'Enviar QR'],
+  removeQr: ['移除', 'Remover'],
+  saveSocial: ['保存社交账号', 'Salvar redes'],
+  records: ['条', 'registros'],
   model: ['型号', 'Modelo'],
   colors: ['颜色', 'Cores'],
   sizes: ['尺码', 'Tamanhos'],
@@ -530,6 +553,7 @@ function makeProduct(o) {
     onShelf: o.onShelf !== false,
     isNew: !!o.isNew,
     starred: !!o.starred,
+    wholesale: o.wholesale || { type: 'price', value: null },
     createdAt: now() - (o.age || 0) * 86400000
   };
 }
@@ -539,6 +563,7 @@ function seedProducts() {
       cat: 'tops', name: { zh: 'polo 衫', pt: 'Camisa Polo' }, model: '2506', price: 79.9,
       sizes: ['P', 'M', 'G', 'GG'],
       colors: [{ zh: '红色', pt: 'Vermelho', stock: { P: true, M: false, G: true, GG: true } }],
+      wholesale: { type: 'price', value: 45.9 },
       art: { kind: 'polo', pal: ['#C8102E', '#8E0A20', '#F2E8D8'] }, isNew: true, age: 2
     }),
     makeProduct({
@@ -548,6 +573,7 @@ function seedProducts() {
         { zh: '米色', pt: 'Bege', stock: { P: true, M: true, G: true } },
         { zh: '黑色', pt: 'Preto', stock: { P: true, M: false, G: true } }
       ],
+      wholesale: { type: 'contact', value: null },
       art: { kind: 'cardigan', pal: ['#D6BF9C', '#B99E77', '#EFE5D3'] }, starred: true, age: 9
     }),
     makeProduct({
@@ -557,6 +583,7 @@ function seedProducts() {
         { zh: '白色', pt: 'Branco', stock: { P: true, M: true, G: false, GG: true } },
         { zh: '黑色', pt: 'Preto', stock: { P: true, M: true, G: true, GG: true } }
       ],
+      wholesale: { type: 'price', value: 29.9 },
       art: { kind: 'tee', pal: ['#F7F3E8', '#DDD5C3', '#EFE6D4'] }, isNew: true, starred: true, age: 3
     }),
     makeProduct({
@@ -681,6 +708,15 @@ function migrateProduct(p) {
   p.images.forEach((i) => {
     if (i.colorId && !p.colors.some((c) => c.id === i.colorId)) { i.colorId = null; changed = true; }
   });
+  const w = p.wholesale;
+  if (!w || typeof w !== 'object' || (w.type !== 'price' && w.type !== 'contact')) {
+    p.wholesale = { type: 'price', value: null };
+    changed = true;
+  } else if (w.type === 'price' && w.value != null) {
+    const num = Number(w.value);
+    if (!isFinite(num) || num < 0) { w.value = null; changed = true; }
+    else if (num !== w.value) { w.value = num; changed = true; }
+  }
   return changed;
 }
 function loadAll() {
@@ -747,6 +783,10 @@ const ICONS = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
   arrowRight: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
+  whatsapp: '<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.3A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.6 8.4c.2 2.6 2.4 4.8 5 5l1-1c.3-.3.8-.3 1.2-.2l1.4.4c.4.1.7.5.6.9-.2 1.2-1.2 2-2.4 2-3.8 0-6.9-3.1-6.9-6.9 0-1.2.8-2.2 2-2.4.4-.1.8.2.9.6l.5 1.4c.1.4 0 .9-.3 1.2l-1 .9Z"/>',
+  instagram: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" stroke="none"/>',
+  facebook: '<path d="M14 8h3V4h-3c-2.8 0-5 2.2-5 5v3H6v4h3v7h4v-7h3l1-4h-4V9c0-.6.4-1 1-1Z"/>',
+  tiktok: '<path d="M15 4c.4 2.6 2.2 4.4 4.8 4.7v3.2c-1.8.1-3.4-.5-4.8-1.6v6.3c0 3.3-2.7 6-6 6s-6-2.7-6-6 2.7-6 6-6c.4 0 .8 0 1.2.1v3.4c-.4-.2-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7s1.2 2.7 2.7 2.7 2.7-1.2 2.7-2.7V4h3.3Z"/>',
   sparkle: '<path d="M12 4v3M12 17v3M4 12h3M17 12h3"/><path d="m6.3 6.3 2 2M15.7 15.7l2 2M17.7 6.3l-2 2M8.3 15.7l-2 2"/>'
 };
 function ic(name, size, opt) {
@@ -755,6 +795,10 @@ function ic(name, size, opt) {
   return '<svg class="ic" width="' + (size || 20) + '" height="' + (size || 20) + '" viewBox="0 0 24 24" fill="' + filled
     + '" stroke="currentColor" stroke-width="' + (o.sw === 0 ? 0 : (o.sw || 1.9))
     + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+}
+function socialIcon(name, size) {
+  const fill = name === 'facebook' || name === 'tiktok';
+  return ic(name, size || 16, fill ? { fill: true, sw: 0 } : {});
 }
 
 /* ------------------------------------------------------------------ *
@@ -832,6 +876,17 @@ function syncColorsFromDict() {
   });
   return changed;
 }
+function normalizeSocial(raw) {
+  const out = {};
+  ['whatsapp', 'tiktok', 'instagram', 'facebook'].forEach((k) => {
+    const v = raw && raw[k];
+    out[k] = {
+      url: v && typeof v.url === 'string' ? v.url : '',
+      qr: v && typeof v.qr === 'string' ? v.qr : ''
+    };
+  });
+  return out;
+}
 function mergeSettings(raw) {
   const out = Object.assign({}, DEFAULT_SETTINGS, raw || {});
   ['brand', 'brandSub', 'kicker', 'heroTitle', 'heroSub'].forEach((k) => {
@@ -848,6 +903,7 @@ function mergeSettings(raw) {
       zh: addr && typeof addr.zh === 'string' ? addr.zh : DEFAULT_SETTINGS.address.zh,
       pt: addr && typeof addr.pt === 'string' ? addr.pt : DEFAULT_SETTINGS.address.pt
     };
+  out.social = normalizeSocial(raw && raw.social);
   return out;
 }
 function headerVal(key) {
@@ -865,21 +921,27 @@ function coverImg(p) {
   const cover = imgs.find((i) => i && i.isCover) || imgs[0];
   return imgSrc(cover) || FALLBACK_ART;
 }
-function galleryImages(p, ci) {
+function galleryItems(p) { return (p && p.images) || []; }
+function colorFocusIndex(p, ci) {
   const all = (p && p.images) || [];
-  if (!all.length) return [];
-  const color = (p.colors || [])[ci];
-  if (!color) return all;
-  const byColor = all.filter((i) => i && i.colorId === color.id);
-  const generic = all.filter((i) => i && !i.colorId);
-  if (byColor.length) return byColor;
-  if (generic.length) return generic;
-  return all;
+  const color = (p && p.colors || [])[ci];
+  if (color) {
+    const i = all.findIndex((img) => img.colorId === color.id);
+    if (i >= 0) return i;
+  }
+  const g = all.findIndex((img) => !img.colorId);
+  return g >= 0 ? g : 0;
 }
-function isSoldOut(p) {
+function stockoutRecordsFor(p) {
   const sizes = SIZE_ORDER.filter((s) => (p.sizes || []).indexOf(s) >= 0);
-  if (!p.colors || !p.colors.length || !sizes.length) return true;
-  return !p.colors.some((c) => sizes.some((s) => c.stock && c.stock[s]));
+  const out = [];
+  if (!p.colors || !sizes.length) return out;
+  p.colors.forEach((c) => {
+    sizes.forEach((s) => {
+      if (!(c.stock && c.stock[s])) out.push({ productId: p.id, colorId: c.id, size: s });
+    });
+  });
+  return out;
 }
 function tagHTML(tag) {
   if (!tag) return '';
@@ -926,6 +988,26 @@ function topbar(opt) {
     + '<div class="topbar-right">' + langHTML() + (o.hideAccount ? '' : accountHTML()) + '</div>'
     + '</div></header>';
 }
+function socialFooterHTML() {
+  const social = (state.settings && state.settings.social) || {};
+  const items = SOCIAL_NETS.filter((x) => {
+    const v = social[x.key];
+    return v && (v.url || v.qr);
+  });
+  if (!items.length) return '';
+  return '<div class="social-block"><p class="social-head">' + t('socialTitle') + '</p><div class="social-list">'
+    + items.map((x) => {
+      const v = social[x.key];
+      const label = esc(x.label);
+      const link = v.url
+        ? '<a class="social-link" href="' + esc(v.url) + '" target="_blank" rel="noopener">' + socialIcon(x.icon, 16) + '<span>' + label + '</span></a>'
+        : '<span class="social-link static">' + socialIcon(x.icon, 16) + '<span>' + label + '</span></span>';
+      const qr = v.qr
+        ? '<button type="button" class="social-qr" data-act="qrview" data-net="' + esc(x.key) + '" aria-label="' + esc(x.label) + ' QR"><img src="' + v.qr + '" alt="' + esc(x.label) + ' QR"></button>'
+        : '';
+      return '<div class="social-item">' + link + qr + '</div>';
+    }).join('') + '</div></div>';
+}
 function footerHTML() {
   const s = state.settings;
   const tel = String(s.phone || '').replace(/[^\d+]/g, '');
@@ -939,6 +1021,7 @@ function footerHTML() {
     + '<a class="foot-item" href="' + esc(map) + '" target="_blank" rel="noopener"><span class="fi">' + ic('pin', 18) + '</span>'
     + '<span class="ft"><small>' + t('address') + '</small><b>' + nm(s.address) + '</b></span></a>'
     + '</div>'
+    + socialFooterHTML()
     + '<div class="foot-bottom"><span>' + t('footNote') + '</span>'
     + (state.session
       ? '<button type="button" class="foot-link" data-act="logout">' + t('logout') + '</button>'
@@ -1076,6 +1159,17 @@ function refreshFeed() {
 /* ------------------------------------------------------------------ *
  * 11. 详情页
  * ------------------------------------------------------------------ */
+function wholesaleHTML(p) {
+  const w = p.wholesale || {};
+  if (w.type === 'contact') {
+    return '<div class="wholesale-line"><span class="w-label">' + t('wholesale') + '</span>'
+      + '<button type="button" class="w-contact" data-act="scroll-contact">' + ic('phone', 14) + t('contactSeller') + '</button></div>';
+  }
+  if (w.type === 'price' && typeof w.value === 'number' && isFinite(w.value)) {
+    return '<div class="wholesale-line"><span class="w-label">' + t('wholesale') + '</span><b>' + money(w.value) + '</b></div>';
+  }
+  return '';
+}
 function stockAreaHTML(p) {
   const sizes = SIZE_ORDER.filter((s) => p.sizes.indexOf(s) >= 0);
   const col = p.colors[detailColor] || p.colors[0];
@@ -1099,7 +1193,7 @@ function stockAreaHTML(p) {
     + (anyStock ? '' : '<span class="lg-alert">' + t('soldOut') + '</span>') + '</div>';
 }
 function galleryHTML(p) {
-  let imgs = galleryImages(p, detailColor);
+  let imgs = galleryItems(p);
   if (!imgs.length) imgs = [{ src: FALLBACK_ART, specialTags: [] }];
   const slides = imgs.map((img, i) => {
     const tags = (img.specialTags || []).map((tg) => '<span class="gal-tag">' + tagHTML(tg) + '</span>').join('');
@@ -1146,11 +1240,12 @@ function renderDetail(id) {
     + '<h1 class="d-title">' + nm(p.name) + '</h1>'
     + '<div class="d-sub"><span class="d-model">' + t('model') + ' № ' + esc(p.model) + '</span></div>'
     + '<div class="price"><b>' + money(p.price) + '</b><small>' + t('price') + '</small></div>'
+    + wholesaleHTML(p)
     + '</div>'
     + '<div class="d-card"><div class="block-head"><h3>' + t('fTags') + '</h3></div>'
     + '<p class="hint block-hint">' + t('stockHint') + '</p>'
     + '<div id="stockArea">' + stockAreaHTML(p) + '</div></div>'
-    + '<section class="contact"><div class="contact-head"><h3>' + t('contact') + '</h3></div>'
+    + '<section class="contact" id="contactSection"><div class="contact-head"><h3>' + t('contact') + '</h3></div>'
     + '<a class="contact-row" href="tel:' + esc(tel) + '"><span class="fi">' + ic('phone', 18) + '</span>'
     + '<span><small>' + t('phone') + '</small><b>' + esc(s.phone) + '</b></span></a>'
     + '<a class="contact-row" href="' + esc(map) + '" target="_blank" rel="noopener"><span class="fi">' + ic('pin', 18) + '</span>'
@@ -1202,29 +1297,61 @@ function adminFilterHTML() {
 function adminProductsHTML(mode) {
   const stockout = mode === 'stockout';
   const all = sortedProducts(state.products);
-  const base = stockout ? all.filter(isSoldOut) : all;
-  const list = state.adminCat === 'all' ? base : base.filter((p) => p.category === state.adminCat);
-  const head = '<div class="admin-head"><div><h2>' + (stockout ? t('adminStockTitle') : t('allProducts')) + '</h2>'
+  if (stockout) {
+    const records = [];
+    all.forEach((p) => stockoutRecordsFor(p).forEach((r) => records.push({ p, r })));
+    const list = state.adminCat === 'all' ? records : records.filter((x) => x.p.category === state.adminCat);
+    const head = '<div class="admin-head"><div><h2>' + t('adminStockTitle') + '</h2>'
+      + '<p>' + list.length + ' ' + tc('records') + '</p></div></div>';
+    if (!list.length) {
+      return head + adminFilterHTML()
+        + '<div class="empty"><div class="empty-ic">' + ic('check', 24) + '</div>'
+        + '<h3>' + t('stockoutNone') + '</h3></div>';
+    }
+    return head + adminFilterHTML()
+      + '<div class="arows">' + list.map(({ p, r }) => {
+        const cat = catById(p.category);
+        const color = (p.colors || []).find((c) => c.id === r.colorId);
+        const cname = color ? oneName(color) : '';
+        return '<article class="arow oos-row' + (p.onShelf ? '' : ' is-off') + '">'
+          + '<div class="arow-thumb"><img src="' + coverImg(p) + '" alt="" loading="lazy"></div>'
+          + '<div class="arow-body">'
+          + '<div class="arow-top"><div class="arow-name">' + nm(p.name) + '</div>'
+          + '<span class="oos-circle" title="' + esc(cname + ' ' + r.size) + '">'
+          + '<i class="oos-dot" style="background:' + (color ? colorHex(color.zh, color.dictId) : '#C9C4B5') + '"></i>'
+          + '<span class="oos-cname">' + esc(cname) + '</span>'
+          + '<span class="oos-size">' + esc(r.size) + '</span></span></div>'
+          + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span></div>'
+          + '<div class="arow-controls">'
+          + '<button type="button" class="tgl' + (p.onShelf ? ' on' : '') + '" data-act="toggle" data-field="onShelf" data-id="' + esc(p.id) + '" aria-pressed="' + p.onShelf + '">'
+          + '<span class="track"><i></i></span>' + tc(p.onShelf ? 'statusOn' : 'statusOff') + '</button>'
+          + '<div class="arow-actions">'
+          + '<a class="mini-btn" href="#/edit/' + esc(p.id) + '" aria-label="' + esc(tt('edit')) + '">' + ic('edit', 16) + '</a>'
+          + '<button type="button" class="mini-btn danger" data-act="del" data-id="' + esc(p.id) + '" aria-label="' + esc(tt('delete')) + '">' + ic('trash', 16) + '</button>'
+          + '</div></div></div></article>';
+      }).join('') + '</div>';
+  }
+  const list = state.adminCat === 'all' ? all : all.filter((p) => p.category === state.adminCat);
+  const head = '<div class="admin-head"><div><h2>' + t('allProducts') + '</h2>'
     + '<p>' + list.length + ' ' + tc('pieces') + '</p></div>'
     + '<a class="btn btn-primary btn-sm" href="#/new">' + ic('plus', 16) + t('addProduct') + '</a></div>';
   if (!list.length) {
     return head + adminFilterHTML()
-      + '<div class="empty"><div class="empty-ic">' + ic(stockout ? 'check' : 'camera', 24) + '</div>'
-      + '<h3>' + t(stockout ? 'stockoutNone' : 'emptyNone') + '</h3>'
-      + (stockout ? '' : '<p>' + t('emptyNoneHint') + '</p>')
+      + '<div class="empty"><div class="empty-ic">' + ic('camera', 24) + '</div>'
+      + '<h3>' + t('emptyNone') + '</h3><p>' + t('emptyNoneHint') + '</p>'
       + '<a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a></div>';
   }
   return head + adminFilterHTML()
     + '<div class="arows">' + list.map((p) => {
       const cat = catById(p.category);
-      const soldout = isSoldOut(p);
+      const recs = stockoutRecordsFor(p);
       return '<article class="arow' + (p.onShelf ? '' : ' is-off') + '">'
         + '<div class="arow-thumb"><img src="' + coverImg(p) + '" alt="" loading="lazy"></div>'
         + '<div class="arow-body">'
         + '<div class="arow-top"><div class="arow-name">' + nm(p.name) + '</div>'
         + '<div class="arow-price">' + money(p.price) + '</div></div>'
         + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span>'
-        + (soldout ? '<span class="stock-tag">' + tc('stockoutBadge') + '</span>' : '') + '</div>'
+        + (recs.length ? '<span class="stock-tag">' + tc('stockoutBadge') + ' ' + recs.length + '</span>' : '') + '</div>'
         + '<div class="arow-controls">'
         + '<button type="button" class="tgl' + (p.onShelf ? ' on' : '') + '" data-act="toggle" data-field="onShelf" data-id="' + esc(p.id) + '" aria-pressed="' + p.onShelf + '">'
         + '<span class="track"><i></i></span>' + tc(p.onShelf ? 'statusOn' : 'statusOff') + '</button>'
@@ -1263,6 +1390,25 @@ function headerFieldHTML(key, labelKey) {
     + '<input class="input" id="set_' + key + '_pt" maxlength="' + lim.pt + '" value="' + esc(v.pt) + '" placeholder="Português" autocomplete="off">'
     + '</div><p class="ferr"></p></div>';
 }
+function socialSettingsHTML() {
+  const social = state.settings.social || {};
+  const blocks = SOCIAL_NETS.map((x) => {
+    const v = social[x.key] || { url: '', qr: '' };
+    return '<div class="social-edit"><div class="social-edit-head">' + socialIcon(x.icon, 16) + '<b>' + esc(x.label) + '</b></div>'
+      + '<div class="field"><label class="label" for="socialUrl_' + x.key + '">' + t('socialUrl') + '<span class="opt">≤200</span></label>'
+      + '<input class="input" id="socialUrl_' + x.key + '" maxlength="200" value="' + esc(v.url) + '" placeholder="https://" autocomplete="off">'
+      + '<p class="ferr"></p></div>'
+      + '<div class="qr-row">'
+      + (v.qr
+        ? '<button type="button" class="qr-thumb" data-act="qrview" data-net="' + x.key + '"><img src="' + v.qr + '" alt=""></button>'
+          + '<button type="button" class="btn btn-ghost btn-sm" data-act="qrremove" data-net="' + x.key + '">' + ic('trash', 13) + t('removeQr') + '</button>'
+        : '<button type="button" class="btn btn-ghost btn-sm" data-act="qrpick" data-net="' + x.key + '">' + ic('upload', 14) + t('uploadQr') + '</button>')
+      + '</div><input type="file" id="qrFile_' + x.key + '" accept="image/jpeg,image/png,image/webp" hidden></div>';
+  }).join('');
+  return '<section class="sect"><div class="sect-head"><h3>' + t('socialTitle') + '</h3><span class="hint">' + t('socialHint') + '</span></div>'
+    + '<div class="social-edit-grid">' + blocks + '</div>'
+    + '<button type="button" class="btn btn-green" data-act="savesocial" style="margin-top:12px">' + t('saveSocial') + '</button></section>';
+}
 function settingsHTML() {
   const s = state.settings;
   const catsHTML = state.cats.map((c) => {
@@ -1286,6 +1432,7 @@ function settingsHTML() {
     + '<input class="input" id="setAddrPt" maxlength="' + LIMITS.address.pt + '" value="' + esc(s.address.pt) + '" placeholder="Endereço em português">'
     + '</div><p class="ferr"></p></div>'
     + '<button type="button" class="btn btn-green" data-act="saveset">' + t('save') + '</button></section>'
+    + socialSettingsHTML()
     + '<section class="sect"><div class="sect-head"><h3>' + t('fHeader') + '</h3><span class="hint">' + t('headerHint') + '</span></div>'
     + headerFieldHTML('brand', 'brandName')
     + headerFieldHTML('brandSub', 'brandSubLabel')
@@ -1363,6 +1510,9 @@ function initForm(product) {
       name: { zh: (src.name && src.name.zh) || '', pt: (src.name && src.name.pt) || '' },
       model: src.model || '',
       price: src.price === 0 || src.price ? String(src.price).replace('.', ',') : '',
+      wholesaleType: (src.wholesale && src.wholesale.type === 'contact') ? 'contact' : 'price',
+      wholesaleValue: (src.wholesale && src.wholesale.type === 'price' && src.wholesale.value != null)
+        ? String(src.wholesale.value).replace('.', ',') : '',
       sizes: (src.sizes || []).slice(),
       colors: normalizeColorsForForm(src.colors),
       images: normalizeImagesForForm(src.images),
@@ -1553,6 +1703,12 @@ function renderForm(editId) {
     + '<div class="field"><label class="label" for="fPrice">' + t('fPrice') + '<span class="req">*</span></label>'
     + '<input class="input" id="fPrice" data-f="price" inputmode="decimal" placeholder="79,90" value="' + esc(d.price) + '" autocomplete="off">'
     + '<p class="ferr"></p></div></div>'
+    + '<div class="field"><label class="label" for="fWholesale">' + t('wholesale') + '</label>'
+    + '<p class="hint" style="margin:-2px 0 8px">' + t('wholesaleHint') + '</p>'
+    + '<div class="wholesale-field">'
+    + '<input class="input" id="fWholesale" data-f="wholesaleValue" inputmode="decimal" placeholder="45,90" value="' + esc(d.wholesaleValue) + '" autocomplete="off"' + (d.wholesaleType === 'contact' ? ' disabled' : '') + '>'
+    + '<button type="button" class="chip-contact' + (d.wholesaleType === 'contact' ? ' on' : '') + '" data-act="toggle-wholesale" aria-pressed="' + (d.wholesaleType === 'contact') + '">' + ic('phone', 14) + t('contactSeller') + '</button>'
+    + '</div><p class="ferr"></p></div>'
     + '</section>'
     + '<section class="sect"><div class="sect-head"><span class="num">2</span><h3>' + t('fImages') + '</h3><span class="hint">' + t('photoHint') + '</span></div>'
     + '<p class="hint" style="margin:-4px 0 10px">' + t('imageHint') + '</p>'
@@ -1944,6 +2100,19 @@ function saveForm() {
   const ptName = String(d.name.pt || '').trim();
   const model = String(d.model || '').trim();
   const price = parseFloat(String(d.price || '').replace(',', '.'));
+  const wRaw = String(d.wholesaleValue || '').trim();
+  let wholesale = { type: 'price', value: null };
+  if (d.wholesaleType === 'contact') {
+    wholesale = { type: 'contact', value: null };
+  } else if (wRaw) {
+    if (!/^\d+([.,]\d{1,2})?$/.test(wRaw)) {
+      errs.push(['fWholesale', 'eWholesale']);
+    } else {
+      const wv = parseFloat(wRaw.replace(',', '.'));
+      if (!isFinite(wv) || wv < 0) errs.push(['fWholesale', 'eWholesale']);
+      else wholesale = { type: 'price', value: Math.round(wv * 100) / 100 };
+    }
+  }
   if (!zhName) errs.push(['fNameZh', 'eName']);
   else if (zhName.length > LIMITS.name.zh) errs.push(['fNameZh', 'eTooLong', LIMITS.name.zh]);
   if (ptName.length > LIMITS.name.pt) errs.push(['fNamePt', 'eTooLong', LIMITS.name.pt]);
@@ -2008,6 +2177,7 @@ function saveForm() {
     sizes: SIZE_ORDER.filter((s) => d.sizes.indexOf(s) >= 0),
     colors,
     images,
+    wholesale,
     onShelf: !!d.onShelf,
     isNew: !!d.isNew,
     starred: !!d.starred,
@@ -2212,6 +2382,49 @@ function saveHeaderSettings() {
   toast(t('sHeaderSaved'));
   render();
 }
+function saveSocialSettings() {
+  clearFormErrors();
+  const social = {};
+  const errs = [];
+  SOCIAL_NETS.forEach((x) => {
+    const url = formVal('socialUrl_' + x.key);
+    if (url.length > 200) errs.push(['socialUrl_' + x.key, 'eTooLong', 200]);
+    const old = (state.settings.social && state.settings.social[x.key]) || {};
+    social[x.key] = { url, qr: old.qr || '' };
+  });
+  if (errs.length) {
+    errs.forEach(([id, key, extra]) => setFieldError(id, key, extra));
+    toast(t('eFields'));
+    return;
+  }
+  state.settings.social = social;
+  saveSettings();
+  toast(t('sSaved'));
+  render();
+}
+function captureSocialInputs() {
+  if (!state.settings.social) state.settings.social = normalizeSocial(null);
+  SOCIAL_NETS.forEach((x) => {
+    const el = document.getElementById('socialUrl_' + x.key);
+    if (!el) return;
+    state.settings.social[x.key] = state.settings.social[x.key] || { url: '', qr: '' };
+    state.settings.social[x.key].url = String(el.value || '').trim();
+  });
+}
+async function uploadQr(net, file) {
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) { toast(t('eFileType')); return; }
+  if (file.size > 5 * 1024 * 1024) { toast(t('eFileSize')); return; }
+  try {
+    captureSocialInputs();
+    const data = await compressImage(file);
+    state.settings.social = state.settings.social || normalizeSocial(null);
+    state.settings.social[net] = state.settings.social[net] || { url: '', qr: '' };
+    state.settings.social[net].qr = data;
+    saveSettings();
+    toast(t('sSaved'));
+    render();
+  } catch (e) { toast(t('eFileType')); }
+}
 function openDictEditor(id) {
   const entry = id ? dictById(id) : null;
   const wrap = openModal(
@@ -2387,7 +2600,7 @@ function onClick(e) {
     case 'zoom': {
       const p = currentProduct();
       if (!p) break;
-      let imgs = galleryImages(p, detailColor);
+      let imgs = galleryItems(p);
       if (!imgs.length) imgs = [{ src: FALLBACK_ART }];
       openLightbox(imgs.map(imgSrc), Number(el.getAttribute('data-i')) || 0);
       break;
@@ -2398,10 +2611,10 @@ function onClick(e) {
       if (!p) break;
       const box = document.getElementById('stockArea');
       if (box) box.innerHTML = stockAreaHTML(p);
-      const old = document.getElementById('gallery');
-      if (old) {
-        old.outerHTML = galleryHTML(p);
-        bindGallery();
+      const track = document.getElementById('galTrack');
+      if (track) {
+        const idx = colorFocusIndex(p, detailColor);
+        track.scrollTo({ left: idx * track.clientWidth, behavior: 'smooth' });
       }
       break;
     }
@@ -2412,8 +2625,45 @@ function onClick(e) {
     case 'chpw': openChangePwd(el.getAttribute('data-u')); break;
     case 'delacc': deleteAccount(el.getAttribute('data-u')); break;
     case 'doLogin': doLogin(); break;
+    case 'scroll-contact': {
+      const el = document.getElementById('contactSection');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      break;
+    }
+    case 'toggle-wholesale': {
+      if (!F) break;
+      F.data.wholesaleType = F.data.wholesaleType === 'contact' ? 'price' : 'contact';
+      const inp = document.getElementById('fWholesale');
+      if (inp) inp.disabled = F.data.wholesaleType === 'contact';
+      el.classList.toggle('on', F.data.wholesaleType === 'contact');
+      el.setAttribute('aria-pressed', String(F.data.wholesaleType === 'contact'));
+      break;
+    }
     case 'saveset': saveStoreSettings(); break;
     case 'saveheader': saveHeaderSettings(); break;
+    case 'savesocial': saveSocialSettings(); break;
+    case 'qrpick': {
+      const f = document.getElementById('qrFile_' + el.getAttribute('data-net'));
+      if (f) f.click();
+      break;
+    }
+    case 'qrremove': {
+      const net = el.getAttribute('data-net');
+      if (state.settings.social && state.settings.social[net]) {
+        captureSocialInputs();
+        state.settings.social[net].qr = '';
+        saveSettings();
+        toast(t('sSaved'));
+        render();
+      }
+      break;
+    }
+    case 'qrview': {
+      const net = el.getAttribute('data-net');
+      const qr = state.settings.social && state.settings.social[net] && state.settings.social[net].qr;
+      if (qr) openLightbox([qr], 0);
+      break;
+    }
     case 'adminfilter':
       state.adminCat = el.getAttribute('data-cat');
       render();
@@ -2602,6 +2852,12 @@ document.addEventListener('input', onInput);
 document.addEventListener('keydown', onKey);
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'fCat' && F) F.data.category = e.target.value;
+  if (e.target && e.target.id && e.target.id.indexOf('qrFile_') === 0) {
+    const net = e.target.id.slice(7);
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (file) uploadQr(net, file);
+  }
   if (e.target && e.target.id === 'importFile' && e.target.files && e.target.files[0]) {
     importData(e.target.files[0]);
     e.target.value = '';
