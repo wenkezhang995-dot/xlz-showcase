@@ -99,7 +99,7 @@ const DEFAULT_SETTINGS = {
   kicker: { zh: '2026 秋冬系列', pt: 'Coleção 2026' },
   heroTitle: { zh: '本周上新', pt: 'Novo drop' },
   heroSub: { zh: '圣保罗档口现货 · 支持拿货', pt: 'Peças prontas em São Paulo para revenda' },
-  logo: { src: '' },
+  logo: { src: '', fav: '' },
   social: {
     whatsapp: { url: '', qr: '' },
     tiktok: { url: '', qr: '' },
@@ -143,9 +143,9 @@ const state = {
   colorDict: [],
   session: null,
   query: '',
-  cat: 'all',
+  homeSel: [],
   adminView: 'library',
-  adminFilter: 'all'
+  adminSel: []
 };
 let F = null;            // 当前表单状态
 let detailColor = 0;     // 详情页当前颜色
@@ -224,9 +224,15 @@ const I18N = {
   eCatDup: ['该品类已存在', 'Categoria já existe'],
   eCatPt: ['请填写葡文品类名', 'Informe a categoria em português'],
   logoTitle: ['品牌 Logo', 'Logo da marca'],
-  logoHint: ['JPG / PNG / WebP，≤5MB，建议方形透明底', 'JPG / PNG / WebP, ≤5MB, quadrado e fundo transparente'],
+  logoHint: ['JPG / PNG / WebP，≤5MB；上传后拖动/缩放裁剪，确认后同步品牌位与 favicon', 'JPG / PNG / WebP, ≤5MB; arraste/amplie, confirme o corte e atualize marca e favicon'],
   uploadLogo: ['上传 Logo', 'Enviar logo'],
   removeLogo: ['移除 Logo', 'Remover logo'],
+  cropTitle: ['调整 Logo', 'Ajustar logo'],
+  cropHint: ['拖动图片调整位置，滑块缩放；方框内为最终效果', 'Arraste para posicionar e use o controle para ampliar; o quadrado é o resultado final'],
+  cropUndo: ['撤销', 'Desfazer'],
+  cropReset: ['重置', 'Redefinir'],
+  cropZoom: ['缩放', 'Zoom'],
+  cropConfirm: ['确认裁剪', 'Confirmar corte'],
   dictInUse: ['该颜色已被产品使用，无法删除', 'Cor em uso por produtos'],
   deleteColor: ['删除颜色', 'Excluir cor'],
   pickColor: ['取色', 'Escolher cor'],
@@ -329,6 +335,10 @@ const I18N = {
   sHeaderSaved: ['头部文案已保存', 'Cabeçalho salvo'],
   stockoutNone: ['暂无缺货产品', 'Nenhum produto esgotado'],
   filterAll: ['全部', 'Todos'],
+  filterResult: ['筛选结果', 'Resultados'],
+  emptyFilter: ['没有符合筛选条件的产品', 'Nenhum produto com estes filtros'],
+  emptyFilterHint: ['调整或清空筛选条件后再试', 'Ajuste ou limpe os filtros e tente novamente'],
+  clearFilters: ['清空筛选', 'Limpar filtros'],
   loginTitle: ['管理员登录', 'Acesso do administrador'],
   loginSub: ['登录后可上传、编辑与删除产品', 'Entre para gerenciar o catálogo'],
   loginBtn: ['登录', 'Entrar'],
@@ -776,9 +786,9 @@ function loadAll() {
   state.session = (s && s.u && s.exp > now() && state.admins.some((a) => a.u === s.u))
     ? { u: s.u, exp: s.exp } : null;
 
-  const allowed = ['all', 'new', 'hot'].concat(state.cats.map((c) => c.id));
-  if (allowed.indexOf(state.cat) < 0) state.cat = 'all';
-  if (allowed.indexOf(state.adminFilter) < 0) state.adminFilter = 'all';
+  const valid = ['new', 'hot'].concat(state.cats.map((c) => c.id));
+  state.homeSel = (state.homeSel || []).filter((v) => valid.indexOf(v) >= 0);
+  state.adminSel = (state.adminSel || []).filter((v) => valid.indexOf(v) >= 0);
 }
 
 /* ------------------------------------------------------------------ *
@@ -858,6 +868,14 @@ function matches(p, q) {
   return hay.indexOf(q) >= 0;
 }
 function catById(id) { return state.cats.find((c) => c.id === id); }
+function filterMatch(p, sel) {
+  if (!sel || !sel.length) return true;
+  const cats = sel.filter((v) => v !== 'new' && v !== 'hot');
+  if (cats.length && cats.indexOf(p.category) < 0) return false;
+  if (sel.indexOf('new') >= 0 && !p.isNew) return false;
+  if (sel.indexOf('hot') >= 0 && !p.starred) return false;
+  return true;
+}
 function currentProduct() {
   const r = parseRoute();
   return r.name === 'detail' ? state.products.find((p) => p.id === r.id) : null;
@@ -976,7 +994,10 @@ function mergeSettings(raw) {
       pt: addr && typeof addr.pt === 'string' ? addr.pt : DEFAULT_SETTINGS.address.pt
     };
   out.social = normalizeSocial(raw && raw.social);
-  out.logo = { src: raw && raw.logo && typeof raw.logo.src === 'string' ? raw.logo.src : '' };
+  out.logo = {
+    src: raw && raw.logo && typeof raw.logo.src === 'string' ? raw.logo.src : '',
+    fav: raw && raw.logo && typeof raw.logo.fav === 'string' ? raw.logo.fav : ''
+  };
   return out;
 }
 function headerVal(key) {
@@ -1033,6 +1054,14 @@ function brandMarkHTML() {
   const src = state.settings.logo && state.settings.logo.src;
   if (src) return '<span class="brand-logo"><img src="' + src + '" alt=""></span>';
   return '<span class="brand-mark" aria-hidden="true"></span>';
+}
+let defaultFavicon = '';
+function applyFavicon() {
+  const link = document.getElementById('favicon');
+  if (!link) return;
+  if (!defaultFavicon) defaultFavicon = link.getAttribute('href') || '';
+  const logo = state.settings.logo || {};
+  link.href = logo.fav || logo.src || defaultFavicon;
 }
 function brandHTML() {
   const b = headerVal('brand');
@@ -1144,9 +1173,12 @@ function filtersHTML() {
     { id: 'new', zh: I18N.newSection[0], pt: I18N.newSection[1] },
     { id: 'hot', zh: I18N.hotSection[0], pt: I18N.hotSection[1] }
   ].concat(state.cats);
-  return '<div class="filters">' + items.map((c) =>
-    '<button type="button" class="filter-chip' + (state.cat === c.id ? ' on' : '') + '" data-act="filter" data-cat="'
-    + esc(c.id) + '" title="' + esc((c.zh || '') + ' / ' + (c.pt || '')) + '">' + nm(c) + '</button>').join('') + '</div>';
+  const sel = state.homeSel || [];
+  return '<div class="filters">' + items.map((c) => {
+    const on = c.id === 'all' ? !sel.length : sel.indexOf(c.id) >= 0;
+    return '<button type="button" class="filter-chip' + (on ? ' on' : '') + '" data-act="filter" data-cat="'
+      + esc(c.id) + '" aria-pressed="' + on + '" title="' + esc((c.zh || '') + ' / ' + (c.pt || '')) + '">' + nm(c) + '</button>';
+  }).join('') + '</div>';
 }
 function searchPlaceholder() {
   if (state.lang === 'zh') return '搜索品名 / 型号';
@@ -1184,29 +1216,40 @@ function emptyHTML(kind, isAdmin) {
     return '<div class="empty"><div class="empty-ic">' + ic('search', 24) + '</div>'
       + '<h3>' + t('emptySearch') + '</h3><p>' + t('emptySearchHint') + '</p></div>';
   }
+  if (kind === 'filter') {
+    return '<div class="empty"><div class="empty-ic">' + ic('search', 24) + '</div>'
+      + '<h3>' + t('emptyFilter') + '</h3><p>' + t('emptyFilterHint') + '</p>'
+      + '<button type="button" class="btn btn-ghost" data-act="filterclear">' + t('clearFilters') + '</button></div>';
+  }
   return '<div class="empty"><div class="empty-ic">' + ic('camera', 24) + '</div>'
     + '<h3>' + t('emptyNone') + '</h3><p>' + t('emptyNoneHint') + '</p>'
     + (isAdmin ? '<a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a>' : '') + '</div>';
 }
+function activeFilterLabel(sel) {
+  if (sel.length === 1) {
+    if (sel[0] === 'new') return { zh: I18N.newSection[0], pt: I18N.newSection[1] };
+    if (sel[0] === 'hot') return { zh: I18N.hotSection[0], pt: I18N.hotSection[1] };
+    const cat = catById(sel[0]);
+    if (cat) return cat;
+  }
+  return { zh: I18N.filterResult[0], pt: I18N.filterResult[1] };
+}
 function feedHTML(list, q, isAdmin) {
   let out = '';
+  const sel = state.homeSel || [];
+  const hasFilters = sel.length > 0;
+  const filtered = hasFilters ? list.filter((p) => filterMatch(p, sel)) : list;
   if (q) {
-    if (!list.length) return emptyHTML('search', isAdmin);
+    if (!filtered.length) return emptyHTML(hasFilters ? 'filter' : 'search', isAdmin);
     out += '<div class="result-bar"><span>' + t('searchResult') + ' <b>' + esc(state.query.trim()) + '</b></span>'
-      + '<span class="result-n">' + list.length + ' ' + tc('pieces') + '</span></div>';
+      + '<span class="result-n">' + filtered.length + ' ' + tc('pieces') + '</span></div>';
   }
-  if (state.cat === 'new' || state.cat === 'hot') {
-    const isNew = state.cat === 'new';
-    const label = isNew
-      ? { zh: I18N.newSection[0], pt: I18N.newSection[1] }
-      : { zh: I18N.hotSection[0], pt: I18N.hotSection[1] };
-    const items = sortedProducts(list.filter((p) => (isNew ? p.isNew : p.starred)));
-    if (q && !items.length) return emptyHTML('search', isAdmin);
-    return out + sectionHTML('sec-' + state.cat, label, items, isAdmin);
+  if (hasFilters) {
+    if (!filtered.length) return emptyHTML('filter', isAdmin);
+    return out + sectionHTML('sec-filter', activeFilterLabel(sel), sortedProducts(filtered), isAdmin);
   }
-  const scope = state.cat === 'all' ? state.cats : state.cats.filter((c) => c.id === state.cat);
-  scope.forEach((cat) => {
-    const items = sortedProducts(list.filter((p) => p.category === cat.id));
+  state.cats.forEach((cat) => {
+    const items = sortedProducts(filtered.filter((p) => p.category === cat.id));
     if (q && !items.length) return;
     out += catSectionHTML(cat, items, isAdmin);
   });
@@ -1366,21 +1409,18 @@ function tabName(tab) {
   if (state.lang === 'pt') return esc(e[1]);
   return '<span class="tz">' + esc(e[0]) + '</span><span class="tp">' + esc(e[1]) + '</span>';
 }
-function adminMatchFilter(p, filter) {
-  if (filter === 'all') return true;
-  if (filter === 'new') return !!p.isNew;
-  if (filter === 'hot') return !!p.starred;
-  return p.category === filter;
-}
 function adminFilterHTML() {
   const items = [
     { id: 'all', zh: I18N.filterAll[0], pt: I18N.filterAll[1] },
     { id: 'new', zh: I18N.newSection[0], pt: I18N.newSection[1] },
     { id: 'hot', zh: I18N.hotSection[0], pt: I18N.hotSection[1] }
   ].concat(state.cats);
-  return '<div class="filters admin-filters">' + items.map((c) =>
-    '<button type="button" class="filter-chip' + (state.adminFilter === c.id ? ' on' : '') + '" data-act="adminfilter" data-cat="'
-    + esc(c.id) + '">' + nm(c) + '</button>').join('') + '</div>';
+  const sel = state.adminSel || [];
+  return '<div class="filters admin-filters">' + items.map((c) => {
+    const on = c.id === 'all' ? !sel.length : sel.indexOf(c.id) >= 0;
+    return '<button type="button" class="filter-chip' + (on ? ' on' : '') + '" data-act="adminfilter" data-cat="'
+      + esc(c.id) + '" aria-pressed="' + on + '">' + nm(c) + '</button>';
+  }).join('') + '</div>';
 }
 function adminViewSwitchHTML() {
   const oosCount = state.products.filter((p) => stockoutRecordsFor(p).length).length;
@@ -1429,7 +1469,8 @@ function stockoutCardHTML(p) {
 function adminProductsHTML() {
   const view = state.adminView === 'stockout' ? 'stockout' : 'library';
   const all = sortedProducts(state.products);
-  const filtered = all.filter((p) => adminMatchFilter(p, state.adminFilter));
+  const filtered = all.filter((p) => filterMatch(p, state.adminSel));
+  const hasFilters = (state.adminSel || []).length > 0;
   const list = view === 'stockout' ? filtered.filter((p) => stockoutRecordsFor(p).length) : filtered;
   const totalOos = list.reduce((n, p) => n + stockoutRecordsFor(p).length, 0);
   const head = '<div class="admin-head"><div><h2>' + (view === 'stockout' ? t('stockoutProducts') : t('allProducts')) + '</h2>'
@@ -1441,11 +1482,15 @@ function adminProductsHTML() {
       : '')
     + '</div>';
   if (!list.length) {
-    return head + adminViewSwitchHTML() + adminFilterHTML()
-      + '<div class="empty"><div class="empty-ic">' + ic(view === 'stockout' ? 'check' : 'camera', 24) + '</div>'
-      + '<h3>' + t(view === 'stockout' ? 'stockoutNone' : 'emptyNone') + '</h3>'
-      + (view === 'stockout' ? '' : '<p>' + t('emptyNoneHint') + '</p><a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a>')
-      + '</div>';
+    const empty = hasFilters
+      ? '<div class="empty"><div class="empty-ic">' + ic('search', 24) + '</div>'
+        + '<h3>' + t('emptyFilter') + '</h3><p>' + t('emptyFilterHint') + '</p>'
+        + '<button type="button" class="btn btn-ghost" data-act="adminfilterclear">' + t('clearFilters') + '</button></div>'
+      : '<div class="empty"><div class="empty-ic">' + ic(view === 'stockout' ? 'check' : 'camera', 24) + '</div>'
+        + '<h3>' + t(view === 'stockout' ? 'stockoutNone' : 'emptyNone') + '</h3>'
+        + (view === 'stockout' ? '' : '<p>' + t('emptyNoneHint') + '</p><a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a>')
+        + '</div>';
+    return head + adminViewSwitchHTML() + adminFilterHTML() + empty;
   }
   if (view === 'stockout') {
     return head + adminViewSwitchHTML() + adminFilterHTML()
@@ -1608,8 +1653,8 @@ async function deleteCategoryFromManager(id) {
   });
   if (!ok) return;
   state.cats = state.cats.filter((c) => c.id !== id);
-  if (state.cat === id) state.cat = 'all';
-  if (state.adminFilter === id) state.adminFilter = 'all';
+  state.homeSel = (state.homeSel || []).filter((v) => v !== id);
+  state.adminSel = (state.adminSel || []).filter((v) => v !== id);
   saveCats();
   toast(t('sCatDel'));
   render();
@@ -2090,6 +2135,7 @@ function pageTitle(r) {
   return 'XLZ · 服装档口产品展示 | Atacado';
 }
 function render() {
+  applyFavicon();
   const r = parseRoute();
   if ((r.name === 'admin' || r.name === 'form') && !state.session) {
     pendingRoute = location.hash || '#/admin/products';
@@ -2219,45 +2265,165 @@ function compressImage(file) {
     img.src = url;
   });
 }
-function compressLogo(file) {
+function readFileDataURL(file) {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const max = 512;
-        const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-        const w = Math.max(1, Math.round(img.naturalWidth * scale));
-        const h = Math.max(1, Math.round(img.naturalHeight * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        let out = canvas.toDataURL('image/webp', 0.92);
-        if (out.indexOf('data:image/webp') !== 0) out = canvas.toDataURL('image/png');
-        URL.revokeObjectURL(url);
-        resolve(out);
-      } catch (err) {
-        URL.revokeObjectURL(url);
-        reject(err);
-      }
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
-    img.src = url;
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
-async function uploadLogo(file) {
+let logoCrop = null;
+async function openLogoEditor(file) {
   if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) { toast(t('eFileType')); return; }
   if (file.size > 5 * 1024 * 1024) { toast(t('eFileSize')); return; }
-  try {
-    const src = await compressLogo(file);
-    state.settings.logo = { src };
-    saveSettings();
-    toast(t('sSaved'));
-    render();
-  } catch (e) { toast(t('eFileType')); }
+  let url;
+  try { url = await readFileDataURL(file); } catch (e) { toast(t('eFileType')); return; }
+  const img = new Image();
+  img.onload = () => {
+    if (!img.naturalWidth || !img.naturalHeight) { toast(t('eFileType')); return; }
+    const wrap = openModal(
+      '<div class="modal-head"><h3>' + t('cropTitle') + '</h3>'
+      + '<button type="button" class="modal-x" data-role="close" aria-label="close">' + ic('x', 16) + '</button></div>'
+      + '<p class="hint">' + t('cropHint') + '</p>'
+      + '<div class="crop-box" id="logoCropBox"><img id="logoCropImg" alt=""></div>'
+      + '<div class="crop-tools"><button type="button" class="btn btn-ghost btn-sm" id="logoCropUndo" disabled>' + t('cropUndo') + '</button>'
+      + '<button type="button" class="btn btn-ghost btn-sm" id="logoCropReset">' + t('cropReset') + '</button>'
+      + '<label class="crop-zoom">' + t('cropZoom') + '<input type="range" id="logoZoom" min="100" max="300" value="100"></label></div>'
+      + '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-role="no">' + t('cancel') + '</button>'
+      + '<button type="button" class="btn btn-primary" id="logoCropOk">' + t('cropConfirm') + '</button></div>'
+    );
+    const box = wrap.querySelector('#logoCropBox');
+    const boxImg = wrap.querySelector('#logoCropImg');
+    const zoomInput = wrap.querySelector('#logoZoom');
+    const undoBtn = wrap.querySelector('#logoCropUndo');
+    const S = box.clientWidth;
+    logoCrop = {
+      img, w: img.naturalWidth, h: img.naturalHeight, S,
+      cover: Math.max(S / img.naturalWidth, S / img.naturalHeight),
+      zoom: 1, x: 0, y: 0, history: []
+    };
+    boxImg.src = url;
+    const renderCrop = () => {
+      const c = logoCrop;
+      if (!c) return;
+      const s = c.cover * c.zoom;
+      const dw = c.w * s;
+      const dh = c.h * s;
+      const maxX = Math.max(0, (dw - S) / 2);
+      const maxY = Math.max(0, (dh - S) / 2);
+      c.x = Math.max(-maxX, Math.min(maxX, c.x));
+      c.y = Math.max(-maxY, Math.min(maxY, c.y));
+      boxImg.style.width = dw + 'px';
+      boxImg.style.height = dh + 'px';
+      boxImg.style.left = ((S - dw) / 2 + c.x) + 'px';
+      boxImg.style.top = ((S - dh) / 2 + c.y) + 'px';
+      if (undoBtn) undoBtn.disabled = !c.history.length;
+    };
+    const pushHistory = (st) => {
+      logoCrop.history.push(st);
+      if (logoCrop.history.length > 20) logoCrop.history.shift();
+    };
+    renderCrop();
+    let drag = null;
+    box.addEventListener('pointerdown', (e) => {
+      if (!logoCrop) return;
+      e.preventDefault();
+      try { box.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+      drag = {
+        sx: e.clientX, sy: e.clientY, ox: logoCrop.x, oy: logoCrop.y,
+        before: { zoom: logoCrop.zoom, x: logoCrop.x, y: logoCrop.y }, moved: false
+      };
+    });
+    box.addEventListener('pointermove', (e) => {
+      if (!drag || !logoCrop) return;
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+      logoCrop.x = drag.ox + dx;
+      logoCrop.y = drag.oy + dy;
+      renderCrop();
+    });
+    const endDrag = () => {
+      if (!drag || !logoCrop) return;
+      if (drag.moved) pushHistory(drag.before);
+      drag = null;
+      renderCrop();
+    };
+    box.addEventListener('pointerup', endDrag);
+    box.addEventListener('pointercancel', endDrag);
+    let zoomBefore = null;
+    zoomInput.addEventListener('pointerdown', () => {
+      if (!logoCrop) return;
+      zoomBefore = { zoom: logoCrop.zoom, x: logoCrop.x, y: logoCrop.y };
+    });
+    zoomInput.addEventListener('input', () => {
+      if (!logoCrop) return;
+      if (!zoomBefore) zoomBefore = { zoom: logoCrop.zoom, x: logoCrop.x, y: logoCrop.y };
+      logoCrop.zoom = Math.max(1, Number(zoomInput.value) / 100);
+      renderCrop();
+    });
+    zoomInput.addEventListener('change', () => {
+      if (logoCrop && zoomBefore && zoomBefore.zoom !== logoCrop.zoom) pushHistory(zoomBefore);
+      zoomBefore = null;
+      renderCrop();
+    });
+    undoBtn.addEventListener('click', () => {
+      if (!logoCrop || !logoCrop.history.length) return;
+      const st = logoCrop.history.pop();
+      logoCrop.zoom = st.zoom;
+      logoCrop.x = st.x;
+      logoCrop.y = st.y;
+      zoomInput.value = String(Math.round(st.zoom * 100));
+      renderCrop();
+    });
+    wrap.querySelector('#logoCropReset').addEventListener('click', () => {
+      if (!logoCrop) return;
+      logoCrop.zoom = 1;
+      logoCrop.x = 0;
+      logoCrop.y = 0;
+      logoCrop.history = [];
+      zoomInput.value = '100';
+      renderCrop();
+    });
+    const closeCrop = (ok) => { closeModal(ok); logoCrop = null; };
+    wrap.querySelector('[data-role="close"]').addEventListener('click', () => closeCrop(false));
+    wrap.querySelector('[data-role="no"]').addEventListener('click', () => closeCrop(false));
+    wrap.querySelector('#logoCropOk').addEventListener('click', () => {
+      if (!logoCrop) return;
+      const c = logoCrop;
+      const s = c.cover * c.zoom;
+      const left = (S - c.w * s) / 2 + c.x;
+      const top = (S - c.h * s) / 2 + c.y;
+      const side = S / s;
+      let sx = (0 - left) / s;
+      let sy = (0 - top) / s;
+      sx = Math.max(0, Math.min(Math.max(0, c.w - side), sx));
+      sy = Math.max(0, Math.min(Math.max(0, c.h - side), sy));
+      const big = document.createElement('canvas');
+      big.width = 512;
+      big.height = 512;
+      const ctx = big.getContext('2d');
+      ctx.clearRect(0, 0, 512, 512);
+      ctx.drawImage(c.img, sx, sy, side, side, 0, 0, 512, 512);
+      let src = big.toDataURL('image/webp', 0.92);
+      if (src.indexOf('data:image/webp') !== 0) src = big.toDataURL('image/png');
+      const fav = document.createElement('canvas');
+      fav.width = 64;
+      fav.height = 64;
+      const fctx = fav.getContext('2d');
+      fctx.clearRect(0, 0, 64, 64);
+      fctx.drawImage(big, 0, 0, 64, 64);
+      const favSrc = fav.toDataURL('image/png');
+      state.settings.logo = { src, fav: favSrc };
+      saveSettings();
+      closeCrop(true);
+      toast(t('sSaved'));
+      render();
+    });
+  };
+  img.onerror = () => toast(t('eFileType'));
+  img.src = url;
 }
 async function addFiles(files) {
   if (!F || !files.length) return;
@@ -2794,7 +2960,7 @@ async function deleteDictColor(id) {
 }
 function exportData() {
   const data = {
-    app: 'xlz-showcase', version: 2, at: new Date().toISOString(),
+    app: 'xlz-showcase', version: 3, at: new Date().toISOString(),
     products: state.products, admins: state.admins, cats: state.cats,
     settings: state.settings, colorDict: state.colorDict
   };
@@ -2861,8 +3027,30 @@ function onClick(e) {
     }
     case 'new': go('#/new'); break;
     case 'filter': {
-      state.cat = el.getAttribute('data-cat');
-      $$('.filter-chip').forEach((b) => b.classList.toggle('on', b.getAttribute('data-cat') === state.cat));
+      const id = el.getAttribute('data-cat');
+      if (id === 'all') {
+        state.homeSel = [];
+      } else {
+        const i = state.homeSel.indexOf(id);
+        if (i >= 0) state.homeSel.splice(i, 1);
+        else state.homeSel.push(id);
+      }
+      $$('.filters .filter-chip').forEach((b) => {
+        const bid = b.getAttribute('data-cat');
+        const on = bid === 'all' ? !state.homeSel.length : state.homeSel.indexOf(bid) >= 0;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+      refreshFeed();
+      break;
+    }
+    case 'filterclear': {
+      state.homeSel = [];
+      $$('.filters .filter-chip').forEach((b) => {
+        const on = b.getAttribute('data-cat') === 'all';
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
       refreshFeed();
       break;
     }
@@ -2952,8 +3140,20 @@ function onClick(e) {
       if (qr) openLightbox([qr], 0);
       break;
     }
-    case 'adminfilter':
-      state.adminFilter = el.getAttribute('data-cat');
+    case 'adminfilter': {
+      const id = el.getAttribute('data-cat');
+      if (id === 'all') {
+        state.adminSel = [];
+      } else {
+        const i = state.adminSel.indexOf(id);
+        if (i >= 0) state.adminSel.splice(i, 1);
+        else state.adminSel.push(id);
+      }
+      render();
+      break;
+    }
+    case 'adminfilterclear':
+      state.adminSel = [];
       render();
       break;
     case 'adminview':
@@ -2973,7 +3173,7 @@ function onClick(e) {
       break;
     }
     case 'logoremove':
-      state.settings.logo = { src: '' };
+      state.settings.logo = { src: '', fav: '' };
       saveSettings();
       toast(t('sSaved'));
       render();
@@ -3161,7 +3361,7 @@ document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'logoFile' && e.target.files && e.target.files[0]) {
     const file = e.target.files[0];
     e.target.value = '';
-    uploadLogo(file);
+    openLogoEditor(file);
   }
   if (e.target && e.target.id && e.target.id.indexOf('qrFile_') === 0) {
     const net = e.target.id.slice(7);
