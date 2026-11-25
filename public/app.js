@@ -99,6 +99,7 @@ const DEFAULT_SETTINGS = {
   kicker: { zh: '2026 秋冬系列', pt: 'Coleção 2026' },
   heroTitle: { zh: '本周上新', pt: 'Novo drop' },
   heroSub: { zh: '圣保罗档口现货 · 支持拿货', pt: 'Peças prontas em São Paulo para revenda' },
+  logo: { src: '' },
   social: {
     whatsapp: { url: '', qr: '' },
     tiktok: { url: '', qr: '' },
@@ -116,6 +117,7 @@ const LIMITS = {
   model: { zh: 20, pt: 20 },
   color: { zh: 12, pt: 20 },
   specialTag: { zh: 12, pt: 20 },
+  category: { zh: 12, pt: 20 },
   phone: { zh: 20 },
   address: { zh: 60, pt: 80 }
 };
@@ -142,7 +144,8 @@ const state = {
   session: null,
   query: '',
   cat: 'all',
-  adminCat: 'all'
+  adminView: 'library',
+  adminFilter: 'all'
 };
 let F = null;            // 当前表单状态
 let detailColor = 0;     // 详情页当前颜色
@@ -211,6 +214,27 @@ const I18N = {
   tabProducts: ['产品', 'Produtos'],
   tabAccounts: ['账号', 'Contas'],
   tabSettings: ['店铺', 'Loja'],
+  tabBeautify: ['页面美化', 'Aparência'],
+  beautifySub: ['头部文案、品牌 Logo 与颜色词典', 'Textos, logo e dicionário de cores'],
+  viewLibrary: ['产品库', 'Produtos'],
+  viewStockout: ['缺货', 'Esgotados'],
+  stockoutProducts: ['缺货商品', 'Produtos com falta'],
+  manageCats: ['管理品类', 'Gerenciar categorias'],
+  categoryManager: ['品类管理', 'Categorias'],
+  eCatDup: ['该品类已存在', 'Categoria já existe'],
+  eCatPt: ['请填写葡文品类名', 'Informe a categoria em português'],
+  logoTitle: ['品牌 Logo', 'Logo da marca'],
+  logoHint: ['JPG / PNG / WebP，≤5MB，建议方形透明底', 'JPG / PNG / WebP, ≤5MB, quadrado e fundo transparente'],
+  uploadLogo: ['上传 Logo', 'Enviar logo'],
+  removeLogo: ['移除 Logo', 'Remover logo'],
+  dictInUse: ['该颜色已被产品使用，无法删除', 'Cor em uso por produtos'],
+  deleteColor: ['删除颜色', 'Excluir cor'],
+  pickColor: ['取色', 'Escolher cor'],
+  brightness: ['明度', 'Brilho'],
+  useColor: ['使用此颜色', 'Usar esta cor'],
+  delColorTitle: ['删除该颜色？', 'Excluir esta cor?'],
+  delColorText: ['仅未被任何产品使用的颜色可以删除。', 'Só cores sem uso podem ser excluídas.'],
+  sDictDel: ['颜色已删除', 'Cor excluída'],
   tabStockout: ['缺货', 'Esgotados'],
   newSection: ['新品', 'Novidades'],
   hotSection: ['热卖品', 'Mais vendidos'],
@@ -754,7 +778,7 @@ function loadAll() {
 
   const allowed = ['all', 'new', 'hot'].concat(state.cats.map((c) => c.id));
   if (allowed.indexOf(state.cat) < 0) state.cat = 'all';
-  if (state.adminCat !== 'all' && !state.cats.some((c) => c.id === state.adminCat)) state.adminCat = 'all';
+  if (allowed.indexOf(state.adminFilter) < 0) state.adminFilter = 'all';
 }
 
 /* ------------------------------------------------------------------ *
@@ -783,6 +807,7 @@ const ICONS = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
   arrowRight: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
   whatsapp: '<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.3A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.6 8.4c.2 2.6 2.4 4.8 5 5l1-1c.3-.3.8-.3 1.2-.2l1.4.4c.4.1.7.5.6.9-.2 1.2-1.2 2-2.4 2-3.8 0-6.9-3.1-6.9-6.9 0-1.2.8-2.2 2-2.4.4-.1.8.2.9.6l.5 1.4c.1.4 0 .9-.3 1.2l-1 .9Z"/>',
   instagram: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" stroke="none"/>',
   facebook: '<path d="M14 8h3V4h-3c-2.8 0-5 2.2-5 5v3H6v4h3v7h4v-7h3l1-4h-4V9c0-.6.4-1 1-1Z"/>',
@@ -876,6 +901,53 @@ function syncColorsFromDict() {
   });
   return changed;
 }
+function hexToRgb(hex) {
+  const h = String(hex || '').replace('#', '').trim();
+  const m = /^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h);
+  if (!m) return { r: 154, g: 163, b: 160 };
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+function rgbToHex(r, g, b) {
+  const to = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return '#' + to(r) + to(g) + to(b);
+}
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: max === 0 ? 0 : d / max, v: max };
+}
+function hexToHsv(hex) {
+  const c = hexToRgb(hex);
+  return rgbToHsv(c.r, c.g, c.b);
+}
+function hsvToRgb(h, s, v) {
+  const c = v * s;
+  const hp = ((h % 360) + 360) % 360 / 60;
+  const x = c * (1 - Math.abs(hp % 2 - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (hp < 1) { r = c; g = x; }
+  else if (hp < 2) { r = x; g = c; }
+  else if (hp < 3) { g = c; b = x; }
+  else if (hp < 4) { g = x; b = c; }
+  else if (hp < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+function hsvHex(h, s, v) {
+  const rgb = hsvToRgb(h, s, v);
+  return rgbToHex(rgb[0], rgb[1], rgb[2]);
+}
 function normalizeSocial(raw) {
   const out = {};
   ['whatsapp', 'tiktok', 'instagram', 'facebook'].forEach((k) => {
@@ -904,6 +976,7 @@ function mergeSettings(raw) {
       pt: addr && typeof addr.pt === 'string' ? addr.pt : DEFAULT_SETTINGS.address.pt
     };
   out.social = normalizeSocial(raw && raw.social);
+  out.logo = { src: raw && raw.logo && typeof raw.logo.src === 'string' ? raw.logo.src : '' };
   return out;
 }
 function headerVal(key) {
@@ -956,10 +1029,15 @@ function tagHTML(tag) {
 /* ------------------------------------------------------------------ *
  * 9. 顶栏 / 页脚
  * ------------------------------------------------------------------ */
+function brandMarkHTML() {
+  const src = state.settings.logo && state.settings.logo.src;
+  if (src) return '<span class="brand-logo"><img src="' + src + '" alt=""></span>';
+  return '<span class="brand-mark" aria-hidden="true"></span>';
+}
 function brandHTML() {
   const b = headerVal('brand');
   return '<a class="brand" href="#/" aria-label="' + esc((b.zh || b.pt || 'XLZ') + ' ' + (headerVal('brandSub').zh || '')) + '">'
-    + '<span class="brand-mark" aria-hidden="true"></span>'
+    + brandMarkHTML()
     + '<span class="brand-text"><b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></span></a>';
 }
 function langHTML() {
@@ -1013,7 +1091,7 @@ function footerHTML() {
   const tel = String(s.phone || '').replace(/[^\d+]/g, '');
   const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.mapQuery || (s.address && s.address.pt) || '');
   return '<footer class="footer' + (state.session ? ' with-fab' : '') + '"><div class="wrap">'
-    + '<div class="foot-top"><div class="foot-brand"><span class="brand-mark" aria-hidden="true"></span>'
+    + '<div class="foot-top"><div class="foot-brand">' + brandMarkHTML()
     + '<b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></div><p class="foot-tag">' + t('footTag') + '</p></div>'
     + '<div class="foot-list">'
     + '<a class="foot-item" href="tel:' + esc(tel) + '"><span class="fi">' + ic('phone', 18) + '</span>'
@@ -1282,66 +1360,98 @@ function bindGallery() {
  * 12. 管理后台
  * ------------------------------------------------------------------ */
 function tabName(tab) {
-  const map = { products: 'tabProducts', stockout: 'tabStockout', accounts: 'tabAccounts', settings: 'tabSettings' };
+  const map = { products: 'tabProducts', accounts: 'tabAccounts', settings: 'tabSettings', beautify: 'tabBeautify' };
   const e = I18N[map[tab] || 'tabProducts'];
   if (state.lang === 'zh') return esc(e[0]);
   if (state.lang === 'pt') return esc(e[1]);
   return '<span class="tz">' + esc(e[0]) + '</span><span class="tp">' + esc(e[1]) + '</span>';
 }
+function adminMatchFilter(p, filter) {
+  if (filter === 'all') return true;
+  if (filter === 'new') return !!p.isNew;
+  if (filter === 'hot') return !!p.starred;
+  return p.category === filter;
+}
 function adminFilterHTML() {
-  const items = [{ id: 'all', zh: I18N.filterAll[0], pt: I18N.filterAll[1] }].concat(state.cats);
+  const items = [
+    { id: 'all', zh: I18N.filterAll[0], pt: I18N.filterAll[1] },
+    { id: 'new', zh: I18N.newSection[0], pt: I18N.newSection[1] },
+    { id: 'hot', zh: I18N.hotSection[0], pt: I18N.hotSection[1] }
+  ].concat(state.cats);
   return '<div class="filters admin-filters">' + items.map((c) =>
-    '<button type="button" class="filter-chip' + (state.adminCat === c.id ? ' on' : '') + '" data-act="adminfilter" data-cat="'
+    '<button type="button" class="filter-chip' + (state.adminFilter === c.id ? ' on' : '') + '" data-act="adminfilter" data-cat="'
     + esc(c.id) + '">' + nm(c) + '</button>').join('') + '</div>';
 }
-function adminProductsHTML(mode) {
-  const stockout = mode === 'stockout';
-  const all = sortedProducts(state.products);
-  if (stockout) {
-    const records = [];
-    all.forEach((p) => stockoutRecordsFor(p).forEach((r) => records.push({ p, r })));
-    const list = state.adminCat === 'all' ? records : records.filter((x) => x.p.category === state.adminCat);
-    const head = '<div class="admin-head"><div><h2>' + t('adminStockTitle') + '</h2>'
-      + '<p>' + list.length + ' ' + tc('records') + '</p></div></div>';
-    if (!list.length) {
-      return head + adminFilterHTML()
-        + '<div class="empty"><div class="empty-ic">' + ic('check', 24) + '</div>'
-        + '<h3>' + t('stockoutNone') + '</h3></div>';
+function adminViewSwitchHTML() {
+  const oosCount = state.products.filter((p) => stockoutRecordsFor(p).length).length;
+  return '<div class="view-switch">'
+    + '<button type="button" class="' + (state.adminView === 'library' ? 'on' : '') + '" data-act="adminview" data-view="library">'
+    + t('viewLibrary') + '<b>' + state.products.length + '</b></button>'
+    + '<button type="button" class="' + (state.adminView === 'stockout' ? 'on' : '') + '" data-act="adminview" data-view="stockout">'
+    + t('viewStockout') + '<b>' + oosCount + '</b></button>'
+    + '</div>';
+}
+function stockoutCardHTML(p) {
+  const cat = catById(p.category);
+  const recs = stockoutRecordsFor(p);
+  const groups = [];
+  recs.forEach((r) => {
+    let g = groups.find((x) => x.colorId === r.colorId);
+    if (!g) {
+      g = { color: (p.colors || []).find((c) => c.id === r.colorId), sizes: [] };
+      groups.push(g);
     }
-    return head + adminFilterHTML()
-      + '<div class="arows">' + list.map(({ p, r }) => {
-        const cat = catById(p.category);
-        const color = (p.colors || []).find((c) => c.id === r.colorId);
-        const cname = color ? oneName(color) : '';
-        return '<article class="arow oos-row' + (p.onShelf ? '' : ' is-off') + '">'
-          + '<div class="arow-thumb"><img src="' + coverImg(p) + '" alt="" loading="lazy"></div>'
-          + '<div class="arow-body">'
-          + '<div class="arow-top"><div class="arow-name">' + nm(p.name) + '</div>'
-          + '<span class="oos-circle" title="' + esc(cname + ' ' + r.size) + '">'
-          + '<i class="oos-dot" style="background:' + (color ? colorHex(color.zh, color.dictId) : '#C9C4B5') + '"></i>'
-          + '<span class="oos-cname">' + esc(cname) + '</span>'
-          + '<span class="oos-size">' + esc(r.size) + '</span></span></div>'
-          + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span></div>'
-          + '<div class="arow-controls">'
-          + '<button type="button" class="tgl' + (p.onShelf ? ' on' : '') + '" data-act="toggle" data-field="onShelf" data-id="' + esc(p.id) + '" aria-pressed="' + p.onShelf + '">'
-          + '<span class="track"><i></i></span>' + tc(p.onShelf ? 'statusOn' : 'statusOff') + '</button>'
-          + '<div class="arow-actions">'
-          + '<a class="mini-btn" href="#/edit/' + esc(p.id) + '" aria-label="' + esc(tt('edit')) + '">' + ic('edit', 16) + '</a>'
-          + '<button type="button" class="mini-btn danger" data-act="del" data-id="' + esc(p.id) + '" aria-label="' + esc(tt('delete')) + '">' + ic('trash', 16) + '</button>'
-          + '</div></div></div></article>';
-      }).join('') + '</div>';
-  }
-  const list = state.adminCat === 'all' ? all : all.filter((p) => p.category === state.adminCat);
-  const head = '<div class="admin-head"><div><h2>' + t('allProducts') + '</h2>'
-    + '<p>' + list.length + ' ' + tc('pieces') + '</p></div>'
-    + '<a class="btn btn-primary btn-sm" href="#/new">' + ic('plus', 16) + t('addProduct') + '</a></div>';
+    g.sizes.push(r.size);
+  });
+  const circles = groups.map((g) => {
+    const cname = g.color ? oneName(g.color) : '';
+    const hex = g.color ? colorHex(g.color.zh, g.color.dictId) : '#C9C4B5';
+    return g.sizes.map((sz) => '<span class="oos-circle" title="' + esc(cname + ' ' + sz) + '">'
+      + '<i class="oos-dot" style="background:' + hex + '"></i>'
+      + '<span class="oos-cname">' + esc(cname) + '</span>'
+      + '<span class="oos-size">' + esc(sz) + '</span></span>').join('');
+  }).join('');
+  return '<article class="arow oos-row' + (p.onShelf ? '' : ' is-off') + '">'
+    + '<div class="arow-thumb"><img src="' + coverImg(p) + '" alt="" loading="lazy"></div>'
+    + '<div class="arow-body">'
+    + '<div class="arow-top"><div class="arow-name">' + nm(p.name) + '</div>'
+    + '<span class="stock-tag">' + tc('stockoutBadge') + ' ' + recs.length + '</span></div>'
+    + '<div class="arow-meta"><span>№ ' + esc(p.model) + '</span><span class="sep">·</span><span>' + esc(oneName(cat)) + '</span></div>'
+    + '<div class="oos-items">' + circles + '</div>'
+    + '<div class="arow-controls">'
+    + '<button type="button" class="tgl' + (p.onShelf ? ' on' : '') + '" data-act="toggle" data-field="onShelf" data-id="' + esc(p.id) + '" aria-pressed="' + p.onShelf + '">'
+    + '<span class="track"><i></i></span>' + tc(p.onShelf ? 'statusOn' : 'statusOff') + '</button>'
+    + '<div class="arow-actions">'
+    + '<a class="mini-btn" href="#/edit/' + esc(p.id) + '" aria-label="' + esc(tt('edit')) + '">' + ic('edit', 16) + '</a>'
+    + '<button type="button" class="mini-btn danger" data-act="del" data-id="' + esc(p.id) + '" aria-label="' + esc(tt('delete')) + '">' + ic('trash', 16) + '</button>'
+    + '</div></div></div></article>';
+}
+function adminProductsHTML() {
+  const view = state.adminView === 'stockout' ? 'stockout' : 'library';
+  const all = sortedProducts(state.products);
+  const filtered = all.filter((p) => adminMatchFilter(p, state.adminFilter));
+  const list = view === 'stockout' ? filtered.filter((p) => stockoutRecordsFor(p).length) : filtered;
+  const totalOos = list.reduce((n, p) => n + stockoutRecordsFor(p).length, 0);
+  const head = '<div class="admin-head"><div><h2>' + (view === 'stockout' ? t('stockoutProducts') : t('allProducts')) + '</h2>'
+    + '<p>' + list.length + ' ' + tc('pieces')
+    + (view === 'stockout' ? ' · ' + totalOos + ' ' + tc('records') : '') + '</p></div>'
+    + (view === 'library'
+      ? '<div class="admin-head-actions"><a class="btn btn-primary btn-sm" href="#/new">' + ic('plus', 16) + tc('addProduct') + '</a>'
+        + '<button type="button" class="btn btn-ghost btn-sm" data-act="managecats">' + ic('grid', 16) + tc('manageCats') + '</button></div>'
+      : '')
+    + '</div>';
   if (!list.length) {
-    return head + adminFilterHTML()
-      + '<div class="empty"><div class="empty-ic">' + ic('camera', 24) + '</div>'
-      + '<h3>' + t('emptyNone') + '</h3><p>' + t('emptyNoneHint') + '</p>'
-      + '<a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a></div>';
+    return head + adminViewSwitchHTML() + adminFilterHTML()
+      + '<div class="empty"><div class="empty-ic">' + ic(view === 'stockout' ? 'check' : 'camera', 24) + '</div>'
+      + '<h3>' + t(view === 'stockout' ? 'stockoutNone' : 'emptyNone') + '</h3>'
+      + (view === 'stockout' ? '' : '<p>' + t('emptyNoneHint') + '</p><a class="btn btn-primary" href="#/new">' + ic('plus', 18) + t('addProduct') + '</a>')
+      + '</div>';
   }
-  return head + adminFilterHTML()
+  if (view === 'stockout') {
+    return head + adminViewSwitchHTML() + adminFilterHTML()
+      + '<div class="arows">' + list.map((p) => stockoutCardHTML(p)).join('') + '</div>';
+  }
+  return head + adminViewSwitchHTML() + adminFilterHTML()
     + '<div class="arows">' + list.map((p) => {
       const cat = catById(p.category);
       const recs = stockoutRecordsFor(p);
@@ -1409,20 +1519,103 @@ function socialSettingsHTML() {
     + '<div class="social-edit-grid">' + blocks + '</div>'
     + '<button type="button" class="btn btn-green" data-act="savesocial" style="margin-top:12px">' + t('saveSocial') + '</button></section>';
 }
-function settingsHTML() {
-  const s = state.settings;
-  const catsHTML = state.cats.map((c) => {
-    const count = state.products.filter((p) => p.category === c.id).length;
-    return '<div class="cat-row"><div class="nm">' + nm(c) + '</div>'
-      + '<small>' + count + ' ' + tc('pieces') + '</small>'
-      + (count ? '' : '<button type="button" class="mini-btn danger" data-act="delcat" data-id="' + esc(c.id) + '"'
-        + ' aria-label="' + esc(tt('delete')) + '" title="' + esc(tt('delete')) + '">' + ic('trash', 14) + '</button>')
-      + '</div>';
-  }).join('');
+function logoSectionHTML() {
+  const src = state.settings.logo && state.settings.logo.src;
+  return '<section class="sect"><div class="sect-head"><h3>' + t('logoTitle') + '</h3><span class="hint">' + t('logoHint') + '</span></div>'
+    + '<div class="logo-row"><div class="logo-preview">' + (src ? '<img src="' + src + '" alt="">' : brandMarkHTML()) + '</div>'
+    + '<div class="logo-actions">'
+    + '<button type="button" class="btn btn-ghost btn-sm" data-act="logopick">' + ic('upload', 15) + t('uploadLogo') + '</button>'
+    + (src ? '<button type="button" class="btn btn-ghost btn-sm" data-act="logoremove">' + ic('trash', 15) + t('removeLogo') + '</button>' : '')
+    + '</div></div>'
+    + '<input type="file" id="logoFile" accept="image/jpeg,image/png,image/webp" hidden></section>';
+}
+function dictSectionHTML() {
   const dictHTML = state.colorDict.map((d) =>
     '<div class="dict-row"><span class="dot" style="background:' + esc(d.hex || '#C9C4B5') + '"></span>'
     + '<span class="dict-name">' + esc(d.zh) + '</span><span class="dict-pt">' + esc(d.pt) + '</span>'
-    + '<button type="button" class="mini-btn" data-act="editdict" data-id="' + esc(d.id) + '" aria-label="' + esc(tt('edit')) + '" title="' + esc(tt('edit')) + '">' + ic('edit', 14) + '</button></div>').join('');
+    + '<button type="button" class="mini-btn" data-act="editdict" data-id="' + esc(d.id) + '" aria-label="' + esc(tt('edit')) + '" title="' + esc(tt('edit')) + '">' + ic('edit', 14) + '</button>'
+    + '<button type="button" class="mini-btn danger" data-act="deldict" data-id="' + esc(d.id) + '" aria-label="' + esc(tt('deleteColor')) + '" title="' + esc(tt('deleteColor')) + '">' + ic('trash', 14) + '</button>'
+    + '</div>').join('');
+  return '<section class="sect"><div class="sect-head"><h3>' + t('colorDictTitle') + '</h3><span class="hint">' + t('colorDictHint') + '</span></div>'
+    + '<div class="dict-list">' + dictHTML + '</div>'
+    + '<button type="button" class="btn btn-green btn-sm" data-act="adddict" style="margin-top:10px">' + ic('plus', 16) + t('addDictColor') + '</button></section>';
+}
+function beautifyHTML() {
+  return '<div class="admin-head"><div><h2>' + t('tabBeautify') + '</h2><p>' + t('beautifySub') + '</p></div></div>'
+    + logoSectionHTML()
+    + '<section class="sect"><div class="sect-head"><h3>' + t('fHeader') + '</h3><span class="hint">' + t('headerHint') + '</span></div>'
+    + headerFieldHTML('brand', 'brandName')
+    + headerFieldHTML('brandSub', 'brandSubLabel')
+    + headerFieldHTML('kicker', 'kickerLabel')
+    + headerFieldHTML('heroTitle', 'heroTitleLabel')
+    + headerFieldHTML('heroSub', 'heroSubLabel')
+    + '<button type="button" class="btn btn-green" data-act="saveheader">' + t('save') + '</button></section>'
+    + dictSectionHTML();
+}
+function categoryManagerHTML() {
+  const rows = state.cats.map((c) => {
+    const count = state.products.filter((p) => p.category === c.id).length;
+    return '<div class="cat-row"><div class="nm">' + nm(c) + '</div>'
+      + '<small>' + count + ' ' + tc('pieces') + '</small>'
+      + '<button type="button" class="mini-btn danger" data-act="mgr-delcat" data-id="' + esc(c.id) + '"'
+      + (count ? ' disabled title="' + esc(tt('catInUse')) + '"' : '') + ' aria-label="' + esc(tt('delete')) + '">' + ic('trash', 14) + '</button></div>';
+  }).join('');
+  return '<div class="cat-list">' + rows + '</div>'
+    + '<div class="cat-add"><div class="row">'
+    + '<input class="input" id="mgrCatZh" maxlength="' + LIMITS.category.zh + '" placeholder="中文名称">'
+    + '<input class="input" id="mgrCatPt" maxlength="' + LIMITS.category.pt + '" placeholder="Nome em português">'
+    + '</div><p class="ferr" id="mgrCatErr"></p>'
+    + '<button type="button" class="btn btn-green" data-act="mgr-addcat">' + ic('plus', 16) + t('addCategory') + '</button></div>';
+}
+function openCategoryManager() {
+  openModal('<div class="modal-head"><h3>' + t('categoryManager') + '</h3>'
+    + '<button type="button" class="modal-x" data-act="mgr-close" aria-label="close">' + ic('x', 16) + '</button></div>'
+    + '<div id="catManager">' + categoryManagerHTML() + '</div>');
+}
+function refreshCategoryManager() {
+  const box = document.getElementById('catManager');
+  if (box) box.innerHTML = categoryManagerHTML();
+}
+function addCategoryFromManager() {
+  const zh = formVal('mgrCatZh');
+  const pt = formVal('mgrCatPt');
+  const err = document.getElementById('mgrCatErr');
+  const fail = (key, extra) => {
+    if (err) {
+      err.textContent = tt(key) + (extra ? ' (' + extra + ')' : '');
+      err.style.display = 'block';
+    }
+  };
+  if (!zh) return fail('eCatName');
+  if (!pt) return fail('eCatPt');
+  if (zh.length > LIMITS.category.zh) return fail('eTooLong', LIMITS.category.zh);
+  if (pt.length > LIMITS.category.pt) return fail('eTooLong', LIMITS.category.pt);
+  if (state.cats.some((c) => c.zh === zh || (c.pt && c.pt.toLowerCase() === pt.toLowerCase()))) return fail('eCatDup');
+  state.cats.push({ id: 'c' + now().toString(36) + Math.random().toString(36).slice(2, 4), zh, pt });
+  saveCats();
+  toast(t('sCatAdded'));
+  render();
+  refreshCategoryManager();
+}
+async function deleteCategoryFromManager(id) {
+  const count = state.products.filter((p) => p.category === id).length;
+  if (count) { toast(t('catInUse')); return; }
+  const cat = catById(id);
+  const ok = await confirmDialog({
+    title: t('delCatTitle'),
+    html: '<b>' + esc(cat ? cat.zh : id) + '</b><br><br>' + t('delCatText'),
+    okText: t('confirmDel')
+  });
+  if (!ok) return;
+  state.cats = state.cats.filter((c) => c.id !== id);
+  if (state.cat === id) state.cat = 'all';
+  if (state.adminFilter === id) state.adminFilter = 'all';
+  saveCats();
+  toast(t('sCatDel'));
+  render();
+}
+function settingsHTML() {
+  const s = state.settings;
   return '<section class="sect"><div class="sect-head"><h3>' + t('storeInfo') + '</h3></div>'
     + '<div class="field"><label class="label" for="setPhone">' + t('storePhone') + '<span class="opt">≤' + LIMITS.phone.zh + '</span></label>'
     + '<input class="input" id="setPhone" maxlength="' + LIMITS.phone.zh + '" value="' + esc(s.phone) + '"></div>'
@@ -1433,24 +1626,6 @@ function settingsHTML() {
     + '</div><p class="ferr"></p></div>'
     + '<button type="button" class="btn btn-green" data-act="saveset">' + t('save') + '</button></section>'
     + socialSettingsHTML()
-    + '<section class="sect"><div class="sect-head"><h3>' + t('fHeader') + '</h3><span class="hint">' + t('headerHint') + '</span></div>'
-    + headerFieldHTML('brand', 'brandName')
-    + headerFieldHTML('brandSub', 'brandSubLabel')
-    + headerFieldHTML('kicker', 'kickerLabel')
-    + headerFieldHTML('heroTitle', 'heroTitleLabel')
-    + headerFieldHTML('heroSub', 'heroSubLabel')
-    + '<button type="button" class="btn btn-green" data-act="saveheader">' + t('save') + '</button></section>'
-    + '<section class="sect"><div class="sect-head"><h3>' + t('categories') + '</h3></div>'
-    + '<div class="cat-list">' + catsHTML + '</div>'
-    + '<div class="cat-add">'
-    + '<div class="row"><input class="input" id="newCatZh" placeholder="中文名称">'
-    + '<input class="input" id="newCatPt" placeholder="Nome em português"></div>'
-    + '<button type="button" class="btn btn-green" data-act="addcat">' + ic('plus', 16) + t('addCategory') + '</button>'
-    + '</div></section>'
-    + '<section class="sect"><div class="sect-head"><h3>' + t('colorDictTitle') + '</h3><span class="hint">' + t('colorDictHint') + '</span></div>'
-    + '<div class="dict-list">' + dictHTML + '</div>'
-    + '<button type="button" class="btn btn-green btn-sm" data-act="adddict" style="margin-top:10px">' + ic('plus', 16) + t('addDictColor') + '</button>'
-    + '</section>'
     + '<section class="sect"><div class="sect-head"><h3>' + t('dataTitle') + '</h3></div>'
     + '<div class="row-btns"><button type="button" class="btn btn-ghost" data-act="export">' + ic('download', 16) + t('exportJson') + '</button>'
     + '<button type="button" class="btn btn-ghost" data-act="import">' + ic('upload', 16) + t('importJson') + '</button></div>'
@@ -1458,11 +1633,16 @@ function settingsHTML() {
     + '<input type="file" id="importFile" accept="application/json,.json" hidden></section>';
 }
 function renderAdmin(tab) {
-  const key = ['products', 'stockout', 'accounts', 'settings'].indexOf(tab) >= 0 ? tab : 'products';
-  const body = key === 'accounts' ? accountsHTML() : key === 'settings' ? settingsHTML() : adminProductsHTML(key);
+  const tabs = ['products', 'accounts', 'settings', 'beautify'];
+  let key = tabs.indexOf(tab) >= 0 ? tab : 'products';
+  if (tab === 'stockout') { state.adminView = 'stockout'; key = 'products'; }
+  const body = key === 'accounts' ? accountsHTML()
+    : key === 'settings' ? settingsHTML()
+      : key === 'beautify' ? beautifyHTML()
+        : adminProductsHTML();
   return topbar({ back: '#/', title: t('adminTitle'), hideAccount: true })
     + '<main class="wrap admin">'
-    + '<div class="tabs">' + ['products', 'stockout', 'accounts', 'settings'].map((k) =>
+    + '<div class="tabs">' + tabs.map((k) =>
       '<a class="tab' + (k === key ? ' on' : '') + '" href="#/admin/' + k + '">' + tabName(k) + '</a>').join('') + '</div>'
     + body
     + '<div class="admin-foot"><button type="button" class="btn btn-ghost" data-act="logout">' + ic('logout', 16) + t('logout') + '</button></div>'
@@ -1745,7 +1925,7 @@ function renderLogin() {
   return '<div class="auth"><div class="auth-deco" aria-hidden="true"></div>'
     + '<div class="auth-lang">' + langHTML() + '</div>'
     + '<div class="auth-inner">'
-    + '<a class="auth-brand" href="#/"><span class="brand-mark" aria-hidden="true"></span>'
+    + '<a class="auth-brand" href="#/">' + brandMarkHTML()
     + '<span class="brand-text"><b>' + headerHTML('brand') + '</b><small>' + headerHTML('brandSub') + '</small></span></a>'
     + '<div class="auth-card"><h1 class="auth-title">' + authTitleHTML() + '</h1><p>' + t('loginSub') + '</p>'
     + '<div class="field"><label class="label" for="lgUser">' + t('username') + '</label>'
@@ -2038,6 +2218,46 @@ function compressImage(file) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
     img.src = url;
   });
+}
+function compressLogo(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 512;
+        const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        let out = canvas.toDataURL('image/webp', 0.92);
+        if (out.indexOf('data:image/webp') !== 0) out = canvas.toDataURL('image/png');
+        URL.revokeObjectURL(url);
+        resolve(out);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+    img.src = url;
+  });
+}
+async function uploadLogo(file) {
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) { toast(t('eFileType')); return; }
+  if (file.size > 5 * 1024 * 1024) { toast(t('eFileSize')); return; }
+  try {
+    const src = await compressLogo(file);
+    state.settings.logo = { src };
+    saveSettings();
+    toast(t('sSaved'));
+    render();
+  } catch (e) { toast(t('eFileType')); }
 }
 async function addFiles(files) {
   if (!F || !files.length) return;
@@ -2427,6 +2647,9 @@ async function uploadQr(net, file) {
 }
 function openDictEditor(id) {
   const entry = id ? dictById(id) : null;
+  let hex = entry && entry.hex ? entry.hex : '#9AA3A0';
+  const hsv0 = hexToHsv(hex);
+  const wheel = { v: Math.max(0.2, hsv0.v) };
   const wrap = openModal(
     '<div class="modal-head"><h3>' + (entry ? t('editDictColor') : t('addDictColor')) + '</h3>'
     + '<button type="button" class="modal-x" data-role="close" aria-label="close">' + ic('x', 16) + '</button></div>'
@@ -2435,9 +2658,82 @@ function openDictEditor(id) {
     + '<div class="field"><label class="label" for="dictPt">' + t('dictPt') + '</label>'
     + '<input class="input" id="dictPt" maxlength="' + LIMITS.color.pt + '" value="' + esc(entry ? entry.pt : '') + '" autocomplete="off">'
     + '<p class="ferr" id="dictErr"></p></div>'
+    + '<div class="field"><label class="label">' + t('pickColor') + '</label>'
+    + '<div class="wheel-box">'
+    + '<canvas id="dictWheel" class="wheel-canvas" width="220" height="220"></canvas>'
+    + '<div class="wheel-side"><span class="wheel-dot" id="dictDot" style="background:' + esc(hex) + '"></span>'
+    + '<b id="dictHex">' + esc(hex.toUpperCase()) + '</b>'
+    + '<label class="wheel-range" for="wheelValue">' + t('brightness') + '<input type="range" id="wheelValue" min="20" max="100" value="' + Math.round(wheel.v * 100) + '"></label>'
+    + '</div></div></div>'
     + '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-role="no">' + t('cancel') + '</button>'
     + '<button type="button" class="btn btn-primary" id="dictSave">' + t('save') + '</button></div>'
   );
+  const canvas = document.getElementById('dictWheel');
+  const dot = document.getElementById('dictDot');
+  const hexLabel = document.getElementById('dictHex');
+  const draw = () => {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const cx = w / 2;
+    const cy = w / 2;
+    const r = w / 2 - 2;
+    const img = ctx.createImageData(w, w);
+    for (let y = 0; y < w; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x - cx;
+        const dy = y - cy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > r) continue;
+        const h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+        const s = d / r;
+        const rgb = hsvToRgb(h, s, wheel.v);
+        const i = (y * w + x) * 4;
+        img.data[i] = rgb[0];
+        img.data[i + 1] = rgb[1];
+        img.data[i + 2] = rgb[2];
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const cur = hexToHsv(hex);
+    const mr = cur.s * r;
+    const mx = cx + Math.cos(cur.h * Math.PI / 180) * mr;
+    const my = cy + Math.sin(cur.h * Math.PI / 180) * mr;
+    ctx.beginPath(); ctx.arc(mx, my, 6, 0, Math.PI * 2); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(mx, my, 7, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1; ctx.stroke();
+  };
+  const setHex = (next) => {
+    hex = next;
+    if (dot) dot.style.background = hex;
+    if (hexLabel) hexLabel.textContent = hex.toUpperCase();
+    draw();
+  };
+  if (canvas) {
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+      const dx = x - canvas.width / 2;
+      const dy = y - canvas.height / 2;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const r = canvas.width / 2 - 2;
+      if (d > r) return;
+      const h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+      setHex(hsvHex(h, d / r, wheel.v));
+    });
+  }
+  const range = document.getElementById('wheelValue');
+  if (range) {
+    range.addEventListener('input', () => {
+      const cur = hexToHsv(hex);
+      wheel.v = Math.max(0.2, Number(range.value) / 100);
+      setHex(hsvHex(cur.h, cur.s, wheel.v));
+    });
+  }
+  draw();
   const save = () => {
     const zh = formVal('dictZh');
     const pt = formVal('dictPt');
@@ -2454,8 +2750,9 @@ function openDictEditor(id) {
     if (entry) {
       entry.zh = zh;
       entry.pt = pt;
+      entry.hex = hex;
     } else {
-      state.colorDict.push({ id: 'c' + now().toString(36) + Math.random().toString(36).slice(2, 4), zh, pt, hex: '#C9C4B5' });
+      state.colorDict.push({ id: 'c' + now().toString(36) + Math.random().toString(36).slice(2, 4), zh, pt, hex });
     }
     saveColorDict();
     if (syncColorsFromDict()) saveProducts();
@@ -2478,30 +2775,21 @@ function openDictEditor(id) {
   wrap.querySelector('[data-role="close"]').addEventListener('click', () => closeModal(false));
   wrap.querySelector('[data-role="no"]').addEventListener('click', () => closeModal(false));
 }
-function addCategory() {
-  const zh = (($('#newCatZh') || {}).value || '').trim();
-  const pt = (($('#newCatPt') || {}).value || '').trim();
-  if (!zh) { toast(t('eCatName')); return; }
-  const id = 'c' + now().toString(36) + Math.random().toString(36).slice(2, 4);
-  state.cats.push({ id, zh, pt: pt || zh });
-  saveCats();
-  toast(t('sCatAdded'));
-  render();
-}
-async function deleteCategory(id) {
-  if (state.products.some((p) => p.category === id)) { toast(t('catInUse')); return; }
-  const cat = catById(id);
+async function deleteDictColor(id) {
+  const entry = dictById(id);
+  if (!entry) return;
+  const used = state.products.some((p) => (p.colors || []).some((c) => c.dictId === id));
+  if (used) { toast(t('dictInUse')); return; }
   const ok = await confirmDialog({
-    title: t('delCatTitle'),
-    html: '<b>' + esc(cat ? cat.zh : id) + '</b><br><br>' + t('delCatText'),
-    okText: t('confirmDel')
+    title: t('delColorTitle'),
+    html: '<b>' + esc(entry.zh) + '</b><br><br>' + t('delColorText'),
+    okText: t('confirmDel'),
+    danger: true
   });
   if (!ok) return;
-  state.cats = state.cats.filter((c) => c.id !== id);
-  if (state.cat === id) state.cat = 'all';
-  if (state.adminCat === id) state.adminCat = 'all';
-  saveCats();
-  toast(t('sCatDel'));
+  state.colorDict = state.colorDict.filter((c) => c.id !== id);
+  saveColorDict();
+  toast(t('sDictDel'));
   render();
 }
 function exportData() {
@@ -2665,13 +2953,31 @@ function onClick(e) {
       break;
     }
     case 'adminfilter':
-      state.adminCat = el.getAttribute('data-cat');
+      state.adminFilter = el.getAttribute('data-cat');
       render();
       break;
+    case 'adminview':
+      state.adminView = el.getAttribute('data-view') === 'stockout' ? 'stockout' : 'library';
+      render();
+      break;
+    case 'managecats': openCategoryManager(); break;
+    case 'mgr-close': closeModal(true); break;
+    case 'mgr-addcat': addCategoryFromManager(); break;
+    case 'mgr-delcat': deleteCategoryFromManager(el.getAttribute('data-id')); break;
     case 'adddict': openDictEditor(null); break;
     case 'editdict': openDictEditor(el.getAttribute('data-id')); break;
-    case 'addcat': addCategory(); break;
-    case 'delcat': deleteCategory(el.getAttribute('data-id')); break;
+    case 'deldict': deleteDictColor(el.getAttribute('data-id')); break;
+    case 'logopick': {
+      const f = document.getElementById('logoFile');
+      if (f) f.click();
+      break;
+    }
+    case 'logoremove':
+      state.settings.logo = { src: '' };
+      saveSettings();
+      toast(t('sSaved'));
+      render();
+      break;
     case 'export': exportData(); break;
     case 'import': {
       const file = document.getElementById('importFile');
@@ -2852,6 +3158,11 @@ document.addEventListener('input', onInput);
 document.addEventListener('keydown', onKey);
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'fCat' && F) F.data.category = e.target.value;
+  if (e.target && e.target.id === 'logoFile' && e.target.files && e.target.files[0]) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    uploadLogo(file);
+  }
   if (e.target && e.target.id && e.target.id.indexOf('qrFile_') === 0) {
     const net = e.target.id.slice(7);
     const file = e.target.files && e.target.files[0];

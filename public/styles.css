@@ -931,6 +931,66 @@ textarea.input{height:auto;min-height:80px;padding:12px 14px;resize:vertical;lin
 .qr-thumb img{width:100%;height:100%;object-fit:cover}
 #contactSection{scroll-margin-top:80px}
 
+/* ---------- 19. 修改3：页面美化 / 品类 / 缺货归并 / 色盘 ---------- */
+.brand-logo{
+  width:32px;height:32px;border-radius:9px;overflow:hidden;flex:none;
+  display:grid;place-items:center;background:rgba(255,255,255,.08);
+}
+.brand-logo img{width:100%;height:100%;object-fit:contain;display:block}
+.foot-brand .brand-logo{width:30px;height:30px}
+.auth-brand .brand-logo{width:34px;height:34px}
+.admin-head{flex-wrap:wrap}
+.admin-head-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.admin-head-actions .btn{min-height:38px;padding:0 10px;font-size:11.5px}
+.admin-filters{flex-wrap:wrap;overflow:visible}
+@media(max-width:620px){.admin-head-actions{width:100%;justify-content:flex-end}}
+.view-switch{
+  display:flex;gap:4px;padding:4px;border-radius:13px;background:#fff;
+  box-shadow:var(--shadow-1);margin:12px 0 10px;
+}
+.view-switch button{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+  min-height:38px;border-radius:9px;font-weight:800;color:var(--muted);
+}
+.view-switch button.on{background:var(--green);color:#fff}
+.view-switch .tw{display:inline-flex;align-items:baseline;gap:4px}
+.view-switch .tz{font-size:9px;opacity:.7}
+.view-switch .tp{font-size:11.5px;font-weight:800}
+.view-switch b{font-size:9.5px;background:rgba(0,0,0,.08);padding:1px 5px;border-radius:99px;font-weight:800}
+.view-switch button.on b{background:rgba(255,255,255,.18)}
+.logo-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo-preview{
+  width:76px;height:76px;border-radius:16px;background:var(--cream);
+  border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;flex:none;
+}
+.logo-preview img{width:100%;height:100%;object-fit:contain}
+.logo-preview .brand-mark{width:48px;height:48px}
+.logo-actions{display:flex;gap:8px;flex-wrap:wrap}
+.wheel-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.wheel-canvas{
+  width:200px;height:200px;border-radius:50%;flex:none;
+  box-shadow:0 0 0 1px var(--line),0 8px 24px -12px rgba(0,0,0,.35);
+  cursor:crosshair;touch-action:manipulation;background:#fff;
+}
+.wheel-side{display:flex;flex-direction:column;gap:9px;align-items:flex-start}
+.wheel-dot{
+  width:34px;height:34px;border-radius:50%;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.16),0 0 0 3px #fff,0 0 0 4px var(--line);
+}
+.wheel-side b{font-size:12px;letter-spacing:.06em;font-weight:800}
+.wheel-range{display:flex;flex-direction:column;gap:3px;font-size:9.5px;font-weight:800;color:var(--muted);letter-spacing:.04em}
+.wheel-range input{width:130px;accent-color:var(--green)}
+.oos-items{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+.oos-items .oos-circle{width:44px;height:44px}
+.oos-row .arow-body{min-width:0}
+.oos-row .arow-top .stock-tag{margin-left:auto}
+.dict-row .mini-btn{width:28px;height:28px;flex:none}
+.dict-row .dict-pt{font-size:10.5px}
+#catManager .cat-list{background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+#catManager .cat-add{margin-top:14px}
+#catManager .cat-row .mini-btn{width:30px;height:30px;flex:none}
+#catManager .cat-row .mini-btn:disabled{opacity:.28}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important;transition-duration:.001ms !important;scroll-behavior:auto !important}
 }
